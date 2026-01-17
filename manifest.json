@@ -32,15 +32,15 @@
   ],
   "i18n": {
     "en": {
-      "name": "Crystal Puzzle: Collapse",
+      "name": "Crystal Collapse",
       "description": "Survive rising junk rows, clear lines, and use rewarded power-ups."
     },
     "uz": {
-      "name": "Kristal Pazl: Kollaps",
+      "name": "Crystal Collapse",
       "description": "Pastdan ko'tariladigan junk qatorlari, liniya tozalash va AD power-up'lar bilan o'yin."
     },
     "ru": {
-      "name": "Кристалл Пазл: Коллапс",
+      "name": "Crystal Collapse",
       "description": "Очищайте линии, переживайте поднимающиеся ряды и активируйте вознаграждаемые усилители."
     }
   },
