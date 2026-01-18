@@ -15,7 +15,7 @@ export type HUDInitData = {
 };
 
 export class HUD extends Phaser.GameObjects.Container {
-    private bg: Phaser.GameObjects.Rectangle;
+    private bg: Phaser.GameObjects.Graphics;
 
     private levelText: Phaser.GameObjects.Text;
     private coinsText: Phaser.GameObjects.Text;
@@ -25,35 +25,47 @@ export class HUD extends Phaser.GameObjects.Container {
         super(scene, 0, 0);
 
         const barH = 96;
+        const barMargin = 18;
+        const barX = barMargin;
+        const barY = 10;
+        const barW = GAME.width - barMargin * 2;
+        const barHInner = barH - 16;
 
-        this.bg = scene.add
-            .rectangle(GAME.width / 2, barH / 2, GAME.width, barH, hexTo0x(Colors.ui.panel))
-            .setAlpha(0.85);
+        this.bg = scene.add.graphics();
+        this.bg.fillStyle(hexTo0x(Colors.ui.panel), 0.92);
+        this.bg.fillRoundedRect(barX, barY, barW, barHInner, 16);
+        this.bg.lineStyle(2, hexTo0x(Colors.ui.playfieldBorder), 0.7);
+        this.bg.strokeRoundedRect(barX, barY, barW, barHInner, 16);
+        this.bg.fillStyle(hexTo0x(Colors.ui.background), 0.25);
+        this.bg.fillRoundedRect(barX + 10, barY + 6, barW - 20, 6, 3);
 
         this.levelText = scene.add
-            .text(24, 26, `Level: ${data.level}`, {
+            .text(barX + 18, barY + 18, `Level: ${data.level}`, {
                 fontFamily: "Arial, sans-serif",
                 fontSize: "28px",
                 color: Colors.ui.textPrimary,
             })
             .setOrigin(0, 0);
+        this.levelText.setShadow(0, 2, Colors.ui.shadow, 4, true, true);
 
         this.coinsText = scene.add
-            .text(GAME.width / 2, 26, `Coins: ${data.coins}`, {
+            .text(GAME.width / 2, barY + 18, `Coins: ${data.coins}`, {
                 fontFamily: "Arial, sans-serif",
                 fontSize: "28px",
                 color: Colors.ui.reward,
                 fontStyle: "bold",
             })
             .setOrigin(0.5, 0);
+        this.coinsText.setShadow(0, 2, Colors.ui.shadow, 4, true, true);
 
         this.shotsText = scene.add
-            .text(GAME.width - 24, 26, `Shots: ${data.shots}`, {
+            .text(barX + barW - 18, barY + 18, `Shots: ${data.shots}`, {
                 fontFamily: "Arial, sans-serif",
                 fontSize: "28px",
                 color: Colors.ui.textPrimary,
             })
             .setOrigin(1, 0);
+        this.shotsText.setShadow(0, 2, Colors.ui.shadow, 4, true, true);
 
         this.add([this.bg, this.levelText, this.coinsText, this.shotsText]);
 

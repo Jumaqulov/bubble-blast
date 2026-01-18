@@ -9,7 +9,10 @@ export const Colors = {
     ui: {
         // Backgrounds
         background: "#1E3A8A" as HexColor, // Primary Background (Deep Blue)
+        backgroundDeep: "#162B63" as HexColor, // Background gradient depth
         panel: "#374151" as HexColor,      // Secondary/Panel Background (Dark Gray)
+        playfield: "#1C3574" as HexColor,  // Gameplay area background
+        playfieldBorder: "#2F4C94" as HexColor, // Gameplay area outline
 
         // Text
         textPrimary: "#FFFFFF" as HexColor,
