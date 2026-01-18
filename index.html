@@ -1,0 +1,54 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Bubble Blast</title>
+
+    <!-- Mobile / responsive -->
+    <meta name="viewport"
+        content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <!-- Disable caching (useful during updates) -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <!-- Minimal reset -->
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #1e3a8a;
+            /* Colors.ui.background */
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #game {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+
+    <!-- Yandex Games SDK (MUST be before your game code) -->
+    <script src="https://sdk.games.s3.yandex.net/sdk.js"></script>
+</head>
+
+<body>
+    <!-- Phaser will mount canvas here -->
+    <div id="game"></div>
+
+    <!-- Vite entry -->
+    <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>
