@@ -30,7 +30,9 @@ npm run preview
 ## Boshqaruv
 
 - Sichqoncha yoki touch bilan nishonga oling.
-- Tap/click - bubble otish.
+- Chap tugma / tap - bubble otish.
+- O'ng tugma - navbatdagi shar bilan almashtirish (swap).
+- Swap uchun navbatdagi sharga bosish ham mumkin.
 
 ## Loyiha tuzilmasi
 
@@ -63,7 +65,13 @@ Minimal playable loop:
 - Grid generatsiya
 - Aim + shooting
 - Collision, snap va match-3
+- Pop animatsiya va tushib ketadigan sharlarga drop animatsiya
+- Score yig'ish
 - Win/lose holatlari (soddalashtirilgan)
+
+Qo'shimcha:
+- Nishon yo'li nuqtali va rang bo'yicha ko'rsatiladi
+- Faqat maydonda mavjud ranglar navbatga tushadi
 
 ## Keyingi qadamlar (ixtiyoriy)
 
