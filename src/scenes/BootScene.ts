@@ -16,6 +16,14 @@ export class BootScene extends Phaser.Scene {
         // Ensure consistent scaling on resize
         this.setupScaleHandlers();
 
+        // Unlock audio on first user gesture (Chrome autoplay policy)
+        this.input.once("pointerdown", () => {
+            const ctx = this.sound?.context;
+            if (ctx && ctx.state === "suspended") {
+                ctx.resume().catch(() => undefined);
+            }
+        });
+
         // Minimal "Loading" text (we'll do a richer Preload later if needed)
         const loadingText = this.add
             .text(GAME.width / 2, GAME.height / 2, "Loading...", {
@@ -26,12 +34,22 @@ export class BootScene extends Phaser.Scene {
             .setOrigin(0.5);
 
         // Init Yandex SDK (safe to fail in local dev)
-        try {
-            await YandexSDK.init({ debug: DEBUG.logSdk });
-            if (DEBUG.logSdk) console.log("[BootScene] YandexSDK initialized");
-        } catch (e) {
-            if (DEBUG.logSdk) console.warn("[BootScene] YandexSDK init failed:", e);
-            // Continue anyway (local dev/offline)
+        const inFrame = (() => {
+            try {
+                return window.self !== window.top;
+            } catch {
+                return true;
+            }
+        })();
+
+        if (inFrame) {
+            try {
+                await YandexSDK.init({ debug: DEBUG.logSdk });
+                if (DEBUG.logSdk) console.log("[BootScene] YandexSDK initialized");
+            } catch (e) {
+                if (DEBUG.logSdk) console.warn("[BootScene] YandexSDK init failed:", e);
+                // Continue anyway (local dev/offline)
+            }
         }
 
         // Small delay to avoid abrupt scene change

@@ -1,6 +1,6 @@
 // src/ui/HUD.ts
 // Minimal HUD (Top bar):
-// - Level, Coins, Shots
+// - Level, Score, Shots
 // - Update methods so GameScene can refresh values
 // Later: add booster buttons + settings/pause.
 
@@ -10,7 +10,7 @@ import { GAME } from "../config/constants";
 
 export type HUDInitData = {
     level: number;
-    coins: number;
+    score: number;
     shots: number;
 };
 
@@ -18,7 +18,7 @@ export class HUD extends Phaser.GameObjects.Container {
     private bg: Phaser.GameObjects.Graphics;
 
     private levelText: Phaser.GameObjects.Text;
-    private coinsText: Phaser.GameObjects.Text;
+    private scoreText: Phaser.GameObjects.Text;
     private shotsText: Phaser.GameObjects.Text;
 
     constructor(scene: Phaser.Scene, data: HUDInitData) {
@@ -48,15 +48,15 @@ export class HUD extends Phaser.GameObjects.Container {
             .setOrigin(0, 0);
         this.levelText.setShadow(0, 2, Colors.ui.shadow, 4, true, true);
 
-        this.coinsText = scene.add
-            .text(GAME.width / 2, barY + 18, `Coins: ${data.coins}`, {
+        this.scoreText = scene.add
+            .text(GAME.width / 2, barY + 18, `Score: ${data.score}`, {
                 fontFamily: "Arial, sans-serif",
                 fontSize: "28px",
                 color: Colors.ui.reward,
                 fontStyle: "bold",
             })
             .setOrigin(0.5, 0);
-        this.coinsText.setShadow(0, 2, Colors.ui.shadow, 4, true, true);
+        this.scoreText.setShadow(0, 2, Colors.ui.shadow, 4, true, true);
 
         this.shotsText = scene.add
             .text(barX + barW - 18, barY + 18, `Shots: ${data.shots}`, {
@@ -67,7 +67,7 @@ export class HUD extends Phaser.GameObjects.Container {
             .setOrigin(1, 0);
         this.shotsText.setShadow(0, 2, Colors.ui.shadow, 4, true, true);
 
-        this.add([this.bg, this.levelText, this.coinsText, this.shotsText]);
+        this.add([this.bg, this.levelText, this.scoreText, this.shotsText]);
 
         scene.add.existing(this);
     }
@@ -76,8 +76,8 @@ export class HUD extends Phaser.GameObjects.Container {
         this.levelText.setText(`Level: ${level}`);
     }
 
-    setCoins(coins: number) {
-        this.coinsText.setText(`Coins: ${coins}`);
+    setScore(score: number) {
+        this.scoreText.setText(`Score: ${score}`);
     }
 
     setShots(shots: number) {
@@ -87,7 +87,7 @@ export class HUD extends Phaser.GameObjects.Container {
     // Convenience
     setAll(data: Partial<HUDInitData>) {
         if (data.level !== undefined) this.setLevel(data.level);
-        if (data.coins !== undefined) this.setCoins(data.coins);
+        if (data.score !== undefined) this.setScore(data.score);
         if (data.shots !== undefined) this.setShots(data.shots);
     }
 }

@@ -67,12 +67,15 @@ export class GameScene extends Phaser.Scene {
 
     private shotsLeft = 0;
     private level = 1;
+    private score = 0;
+    private gameOver = false;
 
     constructor() {
         super({ key: "GameScene" });
     }
 
     create() {
+        this.gameOver = false;
         this.cameras.main.setBackgroundColor(hexTo0x(Colors.ui.background));
         this.drawBackdrop();
 
@@ -82,6 +85,7 @@ export class GameScene extends Phaser.Scene {
         this.setupGridDimensions();
         this.setupShooter();
         this.spawnInitialBubbles();
+        this.ensureNextColorsValid();
         this.setupInput();
 
         this.shotsLeft = this.computeShotsForLevel(this.level);
@@ -90,6 +94,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     update(_t: number, dtMs: number) {
+        if (this.gameOver) {
+            this.aimLine?.clear();
+            this.aimLine?.setVisible(false);
+            this.hideAimGhost();
+            return;
+        }
+
         const dt = dtMs / 1000;
 
         // Update aim line when no projectile
@@ -216,7 +227,7 @@ export class GameScene extends Phaser.Scene {
         this.aimLine.setDepth(6);
 
         // Next bubble (loaded)
-        this.nextColor = randomBubbleHex();
+        this.nextColor = this.pickAvailableColor();
         this.nextBubble = this.makeBubbleVisual(this.shooterX, this.shooterY, this.nextColor, BUBBLES.radius);
         this.nextBubble.setDepth(5);
         this.bindSwapHandler(this.nextBubble);
@@ -231,7 +242,7 @@ export class GameScene extends Phaser.Scene {
             .setStrokeStyle(3, hexTo0x(Colors.ui.textPrimary), 0.5);
         this.nextSlot.setDepth(4);
 
-        this.queuedColor = randomBubbleHex();
+        this.queuedColor = this.pickAvailableColor(this.nextColor);
         this.queuedBubble = this.makeBubbleVisual(this.previewX, this.previewY, this.queuedColor, this.previewRadius);
         this.queuedBubble.setDepth(5);
 
@@ -318,12 +329,16 @@ export class GameScene extends Phaser.Scene {
     }
 
     private setupInput() {
+        this.input.mouse?.disableContextMenu();
         this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+            if (this.gameOver) return;
             if (this.projectile?.active) return; // already shooting
             if (this.shotsLeft <= 0) return;
 
-            // Prevent shooting if click is below shooter (optional)
-            // if (pointer.y > this.shooterY + 120) return;
+            if (pointer.rightButtonDown() || pointer.button === 2) {
+                this.swapLoadedWithQueued();
+                return;
+            }
 
             this.fire(pointer.worldX, pointer.worldY);
         });
@@ -336,7 +351,7 @@ export class GameScene extends Phaser.Scene {
     private drawHUD() {
         this.hud = new HUD(this, {
             level: this.level,
-            coins: 0,
+            score: this.score,
             shots: this.shotsLeft,
         });
         this.hud.setDepth(10);
@@ -479,6 +494,154 @@ export class GameScene extends Phaser.Scene {
         if (this.aimGhost) this.aimGhost.setVisible(false);
     }
 
+    private addScore(amount: number, x?: number, y?: number) {
+        const safe = Math.max(0, Math.floor(amount));
+        if (!safe) return;
+
+        this.score += safe;
+        this.hud?.setScore(this.score);
+
+        if (x === undefined || y === undefined) return;
+
+        const float = this.add
+            .text(x, y - 6, `+${safe}`, {
+                fontFamily: "Arial, sans-serif",
+                fontSize: "22px",
+                color: Colors.ui.reward,
+                fontStyle: "bold",
+            })
+            .setOrigin(0.5);
+        float.setDepth(20);
+        float.setShadow(0, 2, Colors.ui.shadow, 6, true, true);
+
+        this.tweens.add({
+            targets: float,
+            y: y - 44,
+            alpha: 0,
+            duration: 520,
+            ease: "Quad.Out",
+            onComplete: () => float.destroy(),
+        });
+    }
+
+    private playPop(bubble: BubbleGO) {
+        const x = bubble.x;
+        const y = bubble.y;
+        const radius = bubble.bubbleRadius ?? BUBBLES.radius;
+        const color = bubble.colorHex;
+
+        this.spawnPopBurst(x, y, color, radius);
+
+        this.tweens.add({
+            targets: bubble,
+            scale: 0,
+            alpha: 0,
+            duration: 200,
+            ease: "Back.In",
+            onComplete: () => bubble.destroy(),
+        });
+    }
+
+    private spawnPopBurst(x: number, y: number, colorHex: HexColor, radius: number) {
+        const ring = this.add.circle(x, y, radius, 0xffffff, 0);
+        ring.setStrokeStyle(3, hexTo0x(colorHex), 0.8);
+        ring.setDepth(9);
+
+        this.tweens.add({
+            targets: ring,
+            scale: 1.4,
+            alpha: 0,
+            duration: 260,
+            ease: "Quad.Out",
+            onComplete: () => ring.destroy(),
+        });
+
+        const core = this.add.circle(x, y, radius * 0.6, hexTo0x(colorHex), 0.35);
+        core.setDepth(8);
+        this.tweens.add({
+            targets: core,
+            scale: 1.5,
+            alpha: 0,
+            duration: 200,
+            ease: "Quad.Out",
+            onComplete: () => core.destroy(),
+        });
+
+        const count = 8;
+        for (let i = 0; i < count; i++) {
+            const angle = (Math.PI * 2 * i) / count + Phaser.Math.FloatBetween(-0.15, 0.15);
+            const dist = Phaser.Math.Between(10, 22);
+            const size = Phaser.Math.Between(3, 6);
+
+            const dot = this.add.circle(x, y, size, hexTo0x(colorHex), 0.9);
+            dot.setDepth(9);
+
+            this.tweens.add({
+                targets: dot,
+                x: x + Math.cos(angle) * dist,
+                y: y + Math.sin(angle) * dist,
+                alpha: 0,
+                scale: 0.2,
+                duration: 260,
+                ease: "Quad.Out",
+                onComplete: () => dot.destroy(),
+            });
+        }
+    }
+
+    private removeFloatingBubbles(): number {
+        const connected = new Set<CellKey>();
+        const queue: Array<{ r: number; c: number }> = [];
+
+        for (let c = 0; c < this.cols; c++) {
+            const k = this.key(0, c);
+            if (this.occupied.has(k)) {
+                connected.add(k);
+                queue.push({ r: 0, c });
+            }
+        }
+
+        while (queue.length) {
+            const cur = queue.shift()!;
+            for (const nb of this.neighbors(cur.r, cur.c)) {
+                const k = this.key(nb.r, nb.c);
+                if (connected.has(k)) continue;
+                if (!this.occupied.has(k)) continue;
+                connected.add(k);
+                queue.push(nb);
+            }
+        }
+
+        const toDrop: BubbleGO[] = [];
+        for (const b of this.occupied.values()) {
+            const k = this.key(b.cellR, b.cellC);
+            if (!connected.has(k)) {
+                toDrop.push(b);
+            }
+        }
+
+        for (const b of toDrop) {
+            this.occupied.delete(this.key(b.cellR, b.cellC));
+            this.playDrop(b);
+        }
+
+        return toDrop.length;
+    }
+
+    private playDrop(bubble: BubbleGO) {
+        const dropDist = GAME.height - bubble.y + 200;
+        const rot = Phaser.Math.FloatBetween(-0.12, 0.12);
+        this.tweens.add({
+            targets: bubble,
+            y: bubble.y + dropDist,
+            rotation: rot,
+            alpha: 0,
+            duration: 620,
+            ease: "Quad.In",
+            onComplete: () => bubble.destroy(),
+        });
+    }
+
     private bindSwapHandler(target?: Phaser.GameObjects.GameObject) {
         if (!target || !(target as any).setInteractive) return;
         const asAny = target as any;
@@ -563,7 +726,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     private queueNextBubble() {
-        this.queuedColor = randomBubbleHex();
+        this.queuedColor = this.pickAvailableColor(this.nextColor);
 
         if (this.queuedBubble) {
             this.queuedBubble.destroy();
@@ -572,6 +735,45 @@ export class GameScene extends Phaser.Scene {
         this.queuedBubble = this.makeBubbleVisual(this.previewX, this.previewY, this.queuedColor, this.previewRadius);
         this.queuedBubble.setDepth(5);
         this.bindSwapHandler(this.queuedBubble);
+    }
+
+    private getAvailableColors(): HexColor[] {
+        const set = new Set<HexColor>();
+        for (const b of this.occupied.values()) {
+            set.add(b.colorHex);
+        }
+        return Array.from(set);
+    }
+
+    private pickAvailableColor(avoid?: HexColor): HexColor {
+        const available = this.getAvailableColors();
+        if (available.length === 0) return randomBubbleHex();
+        if (!avoid || available.length === 1) {
+            return available[Math.floor(Math.random() * available.length)];
+        }
+        const filtered = available.filter((c) => c !== avoid);
+        if (filtered.length === 0) {
+            return available[Math.floor(Math.random() * available.length)];
+        }
+        return filtered[Math.floor(Math.random() * filtered.length)];
+    }
+
+    private ensureNextColorsValid() {
+        const available = this.getAvailableColors();
+        if (available.length === 0) return;
+
+        if (this.nextBubble && !available.includes(this.nextColor)) {
+            this.nextColor = this.pickAvailableColor();
+            this.setBubbleColor(this.nextBubble, this.nextColor);
+            if (this.aimGhost?.visible) {
+                this.aimGhost.setFillStyle(hexTo0x(this.nextColor), 0.35);
+            }
+        }
+
+        if (this.queuedBubble && !available.includes(this.queuedColor)) {
+            this.queuedColor = this.pickAvailableColor(this.nextColor);
+            this.setBubbleColor(this.queuedBubble, this.queuedColor);
+        }
     }
 
     private destroyProjectile() {
@@ -603,15 +805,16 @@ export class GameScene extends Phaser.Scene {
         if (match.length >= BUBBLES.minMatchCount) {
             for (const b of match) {
                 this.occupied.delete(this.key(b.cellR, b.cellC));
-                this.tweens.add({
-                    targets: b,
-                    scale: 0,
-                    alpha: 0,
-                    duration: 140,
-                    onComplete: () => b.destroy(),
-                });
+                this.playPop(b);
             }
-            // TODO: add coins using ECONOMY + GameState
+            this.addScore(match.length * 10, placed.x, placed.y);
+
+            const dropped = this.removeFloatingBubbles();
+            if (dropped > 0) {
+                this.addScore(dropped * 5);
+            }
+
+            this.ensureNextColorsValid();
         }
 
         // Win condition (minimal): if no bubbles remain, next level
@@ -751,6 +954,11 @@ export class GameScene extends Phaser.Scene {
     // -------------------------
 
     private showLosePopup() {
+        this.gameOver = true;
+        this.aimLine?.clear();
+        this.aimLine?.setVisible(false);
+        this.hideAimGhost();
+
         const g = this.add.graphics();
         g.fillStyle(0x000000, 0.5);
         g.fillRect(0, 0, GAME.width, GAME.height);
@@ -796,8 +1004,9 @@ export class GameScene extends Phaser.Scene {
 
         this.shotsLeft = this.computeShotsForLevel(this.level);
         this.spawnInitialBubbles();
-        // Rebuild HUD by restarting scene for simplicity
-        this.scene.restart();
+        this.ensureNextColorsValid();
+        this.hud?.setLevel(this.level);
+        this.hud?.setShots(this.shotsLeft);
     }
 
     private computeShotsForLevel(level: number): number {
