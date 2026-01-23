@@ -66,6 +66,26 @@ export class MenuScene extends Phaser.Scene {
             this.scene.start("GameScene");
         });
 
+        // Shop Button
+        const shopY = cy + 160;
+        const shopBtnBg = this.add
+            .rectangle(cx, shopY, btnWidth, btnHeight, hexTo0x(Colors.ui.panel))
+            .setStrokeStyle(4, hexTo0x(Colors.ui.ctaPrimaryBottom))
+            .setInteractive({ useHandCursor: true });
+
+        const shopBtnText = this.add
+            .text(cx, shopY, "SHOP", {
+                fontFamily: "Arial, sans-serif",
+                fontSize: "40px",
+                fontStyle: "bold",
+                color: Colors.ui.textPrimary,
+            })
+            .setOrigin(0.5);
+
+        shopBtnBg.on("pointerdown", () => {
+            this.scene.start("ShopScene");
+        });
+
         // Footer hint
         this.add
             .text(cx, GAME.height - 80, "Tap PLAY to start", {

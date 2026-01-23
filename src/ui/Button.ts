@@ -18,7 +18,9 @@ export type ButtonOptions = {
 };
 
 export class Button extends Phaser.GameObjects.Container {
+    private shadow: Phaser.GameObjects.Rectangle;
     private bg: Phaser.GameObjects.Rectangle;
+    private gloss: Phaser.GameObjects.Rectangle;
     private label: Phaser.GameObjects.Text;
     private disabled: boolean;
 
@@ -32,7 +34,10 @@ export class Button extends Phaser.GameObjects.Container {
 
         this.disabled = !!options.disabled;
 
-        // Background
+        // Background + depth
+        this.shadow = scene.add
+            .rectangle(0, 6, options.width, options.height, 0x000000, 0.28);
+
         this.bg = scene.add
             .rectangle(
                 0,
@@ -44,11 +49,14 @@ export class Button extends Phaser.GameObjects.Container {
                 )
             )
             .setStrokeStyle(
-                4,
+                3,
                 hexTo0x(
                     this.disabled ? Colors.ui.disabled : Colors.ui.ctaPrimaryBottom
                 )
             );
+
+        this.gloss = scene.add
+            .rectangle(0, -options.height / 2 + 10, options.width - 12, 10, 0xffffff, 0.14);
 
         // Text
         this.label = scene.add
@@ -60,7 +68,7 @@ export class Button extends Phaser.GameObjects.Container {
             })
             .setOrigin(0.5);
 
-        this.add([this.bg, this.label]);
+        this.add([this.shadow, this.bg, this.gloss, this.label]);
         this.setSize(options.width, options.height);
         this.setInteractive({ useHandCursor: !this.disabled });
 
@@ -74,10 +82,12 @@ export class Button extends Phaser.GameObjects.Container {
     private setupInteractions(onClick: () => void) {
         this.on("pointerover", () => {
             this.bg.setFillStyle(hexTo0x(Colors.ui.ctaSecondary));
+            this.gloss.setFillStyle(0xffffff, 0.2);
         });
 
         this.on("pointerout", () => {
             this.bg.setFillStyle(hexTo0x(Colors.ui.ctaPrimaryTop));
+            this.gloss.setFillStyle(0xffffff, 0.14);
         });
 
         this.on("pointerdown", () => {
@@ -96,6 +106,8 @@ export class Button extends Phaser.GameObjects.Container {
 
         this.bg.setFillStyle(hexTo0x(Colors.ui.disabled));
         this.bg.setStrokeStyle(4, hexTo0x(Colors.ui.disabled));
+        this.shadow.setFillStyle(0x000000, 0.2);
+        this.gloss.setFillStyle(0xffffff, 0.06);
     }
 
     setText(text: string) {

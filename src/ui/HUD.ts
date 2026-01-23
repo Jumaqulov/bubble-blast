@@ -32,12 +32,25 @@ export class HUD extends Phaser.GameObjects.Container {
         const barHInner = barH - 16;
 
         this.bg = scene.add.graphics();
-        this.bg.fillStyle(hexTo0x(Colors.ui.panel), 0.92);
-        this.bg.fillRoundedRect(barX, barY, barW, barHInner, 16);
-        this.bg.lineStyle(2, hexTo0x(Colors.ui.playfieldBorder), 0.7);
-        this.bg.strokeRoundedRect(barX, barY, barW, barHInner, 16);
-        this.bg.fillStyle(hexTo0x(Colors.ui.background), 0.25);
-        this.bg.fillRoundedRect(barX + 10, barY + 6, barW - 20, 6, 3);
+        // Shadow
+        this.bg.fillStyle(0x000000, 0.28);
+        this.bg.fillRoundedRect(barX + 4, barY + 6, barW, barHInner, 18);
+
+        // Base panel
+        this.bg.fillStyle(hexTo0x(Colors.ui.panel), 0.96);
+        this.bg.fillRoundedRect(barX, barY, barW, barHInner, 18);
+
+        // Top highlight / bottom shade
+        this.bg.fillStyle(0xffffff, 0.08);
+        this.bg.fillRoundedRect(barX + 10, barY + 8, barW - 20, 10, 6);
+        this.bg.fillStyle(0x000000, 0.18);
+        this.bg.fillRoundedRect(barX + 10, barY + barHInner - 18, barW - 20, 12, 6);
+
+        // Rim
+        this.bg.lineStyle(2, hexTo0x(Colors.ui.playfieldBorder), 0.85);
+        this.bg.strokeRoundedRect(barX, barY, barW, barHInner, 18);
+        this.bg.lineStyle(2, 0xffffff, 0.12);
+        this.bg.strokeRoundedRect(barX + 4, barY + 4, barW - 8, barHInner - 8, 14);
 
         this.levelText = scene.add
             .text(barX + 18, barY + 18, `Level: ${data.level}`, {

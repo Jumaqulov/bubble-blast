@@ -10,6 +10,13 @@ import Phaser from "phaser";
 import { Colors, HexColor, hexTo0x, randomBubbleHex } from "../config/colors";
 import { BUBBLES, GAME, INPUT, LEVELS } from "../config/constants";
 import { HUD } from "../ui/HUD";
+import { ensurePhosphorTextures, getPhosphorKey, PhosphorIconId } from "../ui/phosphor";
+import { EffectManager } from "../systems/EffectManager";
+import { BubbleManager } from "../systems/BubbleManager";
+import { LevelManager } from "../systems/LevelManager";
+import { ShootingSystem } from "../systems/ShootingSystem";
+import { AudioManager } from "../systems/AudioManager";
+import { GameState } from "../state/GameState";
 
 type CellKey = string;
 
@@ -32,10 +39,17 @@ type Projectile = {
     vx: number;
     vy: number;
     active: boolean;
+    isBomb?: boolean;
 };
+
+type BoosterId = "colorSwap" | "aimGuide" | "bomb";
 
 export class GameScene extends Phaser.Scene {
     private gridTopY = 140;
+    private playfieldLeft = 18;
+    private playfieldRight = GAME.width - 18;
+    private playfieldTop = 140;
+    private playfieldBottom = GAME.height - 18;
 
     private cols = 0;
     private maxRows = 0;
@@ -70,11 +84,37 @@ export class GameScene extends Phaser.Scene {
     private score = 0;
     private gameOver = false;
 
+    private aimGuideActive = false;
+    private bombActive = false;
+
+    // Scroll reveal system - bubbles above visibleRowOffset are hidden
+    private visibleRowOffset = 0;  // How many rows are hidden above
+    private totalLevelRows = 0;    // Total rows in the level
+    private levelColors: HexColor[] = [];  // Store level colors
+
+    private bubs!: BubbleManager;
+    private levelMgr!: LevelManager;
+    private shooter!: ShootingSystem;
+    private effectManager!: EffectManager;
+    private audio!: AudioManager;
+
+    private uiContainer!: Phaser.GameObjects.Container;
+
+    // hud removed from here to avoid duplicate
+
+    private boosterBar?: Phaser.GameObjects.Graphics;
+    private boosterUI: Partial<Record<BoosterId, Phaser.GameObjects.Container>> = {};
+    private boosterCountText: Partial<Record<BoosterId, Phaser.GameObjects.Text>> = {};
+
     constructor() {
         super({ key: "GameScene" });
     }
 
     create() {
+        this.effectManager = new EffectManager(this);
+        this.audio = new AudioManager(this);
+        this.audio.playMusic("bgm_main", 0.4);
+
         this.gameOver = false;
         this.cameras.main.setBackgroundColor(hexTo0x(Colors.ui.background));
         this.drawBackdrop();
@@ -84,11 +124,10 @@ export class GameScene extends Phaser.Scene {
 
         this.setupGridDimensions();
         this.setupShooter();
+        this.setupBoosters();
         this.spawnInitialBubbles();
         this.ensureNextColorsValid();
         this.setupInput();
-
-        this.shotsLeft = this.computeShotsForLevel(this.level);
 
         this.drawHUD();
     }
@@ -120,8 +159,8 @@ export class GameScene extends Phaser.Scene {
         p.go.y += p.vy * dt;
 
         // Bounce off side walls
-        const left = BUBBLES.radius + 8;
-        const right = GAME.width - BUBBLES.radius - 8;
+        const left = this.playfieldLeft + BUBBLES.radius;
+        const right = this.playfieldRight - BUBBLES.radius;
         if (p.go.x <= left) {
             p.go.x = left;
             p.vx *= -1;
@@ -132,7 +171,7 @@ export class GameScene extends Phaser.Scene {
 
         // Hit top => snap
         if (p.go.y <= this.gridTopY + BUBBLES.radius) {
-            this.snapProjectileToGrid(p.go.x, p.go.y, p.colorHex);
+            this.snapProjectileToGrid(p.go.x, p.go.y, p.colorHex, p.isBomb);
             this.destroyProjectile();
             return;
         }
@@ -140,7 +179,7 @@ export class GameScene extends Phaser.Scene {
         // Hit any bubble => snap
         const hit = this.findCollisionBubble(p.go.x, p.go.y);
         if (hit) {
-            this.snapProjectileToGrid(p.go.x, p.go.y, p.colorHex);
+            this.snapProjectileToGrid(p.go.x, p.go.y, p.colorHex, p.isBomb);
             this.destroyProjectile();
             return;
         }
@@ -164,7 +203,7 @@ export class GameScene extends Phaser.Scene {
         gfx.fillRect(0, 0, GAME.width, GAME.height);
 
         // Subtle bubble rings for texture
-        gfx.lineStyle(2, hexTo0x(Colors.ui.textSecondary), 0.08);
+        gfx.lineStyle(2, hexTo0x(Colors.ui.textSecondary), 0.07);
         const rings = [
             { x: 90, y: 260, r: 64 },
             { x: 620, y: 220, r: 48 },
@@ -175,24 +214,44 @@ export class GameScene extends Phaser.Scene {
             gfx.strokeCircle(ring.x, ring.y, ring.r);
         }
 
-        // Playfield panel
+        // Playfield panel - Shifted left to make room for sidebar
         const barH = 96;
-        const panelMarginX = 18;
         const panelTop = barH + 14;
         const panelBottom = GAME.height - 18;
-        const panelW = GAME.width - panelMarginX * 2;
-        const panelH = panelBottom - panelTop;
-        const panelX = panelMarginX;
-        const panelY = panelTop;
 
-        gfx.fillStyle(0x000000, 0.18);
-        gfx.fillRoundedRect(panelX + 4, panelY + 8, panelW, panelH, 26);
+        // We need space for 10 cols * 48px = ~480-500px content
+        // Plus padding (12px inset * 2). Let's make panel width 540px
+        const panelW = 540;
+        const panelH = panelBottom - panelTop;
+
+        // Left align with small margin
+        const panelX = 20;
+        const panelY = panelTop;
+        const innerInset = 16;
+
+        this.playfieldLeft = panelX + innerInset;
+        this.playfieldRight = panelX + panelW - innerInset;
+        this.playfieldTop = panelY + innerInset;
+        this.playfieldBottom = panelY + panelH - innerInset;
+        this.gridTopY = this.playfieldTop;
+
+        gfx.fillStyle(0x000000, 0.26);
+        gfx.fillRoundedRect(panelX + 6, panelY + 10, panelW, panelH, 28);
 
         gfx.fillStyle(hexTo0x(Colors.ui.playfield), 1);
-        gfx.fillRoundedRect(panelX, panelY, panelW, panelH, 26);
+        gfx.fillRoundedRect(panelX, panelY, panelW, panelH, 28);
 
-        gfx.lineStyle(2, hexTo0x(Colors.ui.playfieldBorder), 0.9);
-        gfx.strokeRoundedRect(panelX, panelY, panelW, panelH, 26);
+        // Subtle inner highlight (avoid visible "box")
+        gfx.fillStyle(0xffffff, 0.04);
+        gfx.fillRoundedRect(panelX + 14, panelY + 12, panelW - 28, 6, 4);
+
+        gfx.lineStyle(3, hexTo0x(Colors.ui.playfieldBorder), 0.95);
+        gfx.strokeRoundedRect(panelX, panelY, panelW, panelH, 28);
+
+        gfx.lineStyle(2, 0xffffff, 0.16);
+        gfx.strokeRoundedRect(panelX + 6, panelY + 6, panelW - 12, panelH - 12, 24);
+        gfx.lineStyle(2, 0x000000, 0.25);
+        gfx.strokeRoundedRect(panelX + 10, panelY + 10, panelW - 20, panelH - 20, 22);
 
         gfx.setDepth(-100);
     }
@@ -200,8 +259,7 @@ export class GameScene extends Phaser.Scene {
     private setupGridDimensions() {
         // Fit as many columns as possible with diameter spacing.
         // Keep a small margin so bubbles don't touch screen edge.
-        const margin = 18;
-        const usable = GAME.width - margin * 2;
+        const usable = this.playfieldRight - this.playfieldLeft;
 
         // With offset rows, odd rows shift by radius; keep cols conservative.
         this.cols = Math.floor((usable - BUBBLES.radius) / this.hSpacing);
@@ -209,18 +267,28 @@ export class GameScene extends Phaser.Scene {
     }
 
     private setupShooter() {
-        this.shooterX = GAME.width / 2;
+        const pfCenter = (this.playfieldLeft + this.playfieldRight) / 2;
+        this.shooterX = pfCenter;
         this.shooterY = GAME.height - 170;
 
-        // Shooter base + ring
-        this.add
-            .circle(this.shooterX, this.shooterY + 36, 54, hexTo0x(Colors.ui.panel))
-            .setStrokeStyle(4, hexTo0x(Colors.ui.textSecondary));
+        // Shooter base + ring (3D)
+        const baseShadow = this.add.circle(this.shooterX + 6, this.shooterY + 44, 56, 0x000000, 0.28);
+        const base = this.add.circle(this.shooterX, this.shooterY + 36, 54, hexTo0x(Colors.ui.panel));
+        base.setStrokeStyle(3, hexTo0x(Colors.ui.playfieldBorder), 0.8);
+        const baseHighlight = this.add.circle(this.shooterX, this.shooterY + 30, 48, 0xffffff, 0.08);
 
-        const shooterRing = this.add
-            .circle(this.shooterX, this.shooterY, BUBBLES.radius + 16, 0x000000, 0.2)
-            .setStrokeStyle(3, hexTo0x(Colors.ui.textPrimary), 0.6);
-        shooterRing.setDepth(4);
+        const shooterRingOuter = this.add
+            .circle(this.shooterX, this.shooterY, BUBBLES.radius + 18, 0x000000, 0.22)
+            .setStrokeStyle(3, 0xffffff, 0.55);
+        const shooterRingInner = this.add
+            .circle(this.shooterX, this.shooterY, BUBBLES.radius + 12, 0xffffff, 0.06)
+            .setStrokeStyle(2, 0x000000, 0.3);
+
+        baseShadow.setDepth(2);
+        base.setDepth(3);
+        baseHighlight.setDepth(4);
+        shooterRingOuter.setDepth(4);
+        shooterRingInner.setDepth(5);
 
         // Aim line
         this.aimLine = this.add.graphics();
@@ -231,6 +299,7 @@ export class GameScene extends Phaser.Scene {
         this.nextBubble = this.makeBubbleVisual(this.shooterX, this.shooterY, this.nextColor, BUBBLES.radius);
         this.nextBubble.setDepth(5);
         this.bindSwapHandler(this.nextBubble);
+        this.updateBombIndicator();
 
         // Next preview slot (queued)
         this.previewX = this.shooterX + 118;
@@ -257,28 +326,49 @@ export class GameScene extends Phaser.Scene {
         }
 
         this.swapGfx = this.add.graphics();
-        const r = this.previewRadius + 22;
+        const r = this.previewRadius + 24;
         this.swapGfx.setPosition(this.previewX, this.previewY);
 
-        this.swapGfx.lineStyle(4, hexTo0x(Colors.ui.textPrimary), 0.8);
+        // Backplate glow
+        this.swapGfx.fillStyle(0xffffff, 0.05);
+        this.swapGfx.fillCircle(0, 0, r + 6);
+        this.swapGfx.fillStyle(0x000000, 0.18);
+        this.swapGfx.fillCircle(2, 3, r + 4);
+
+        // Shadow arc (depth)
+        this.swapGfx.lineStyle(6, 0x000000, 0.25);
         this.swapGfx.beginPath();
-        this.swapGfx.arc(0, 0, r, Phaser.Math.DegToRad(25), Phaser.Math.DegToRad(175), false);
+        this.swapGfx.arc(2, 3, r, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(200), false);
+        this.swapGfx.strokePath();
+
+        // Main arcs
+        this.swapGfx.lineStyle(5, 0xffffff, 0.75);
+        this.swapGfx.beginPath();
+        this.swapGfx.arc(0, 0, r, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(180), false);
         this.swapGfx.strokePath();
 
         this.swapGfx.beginPath();
-        this.swapGfx.arc(0, 0, r, Phaser.Math.DegToRad(205), Phaser.Math.DegToRad(355), false);
+        this.swapGfx.arc(0, 0, r, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(360), false);
         this.swapGfx.strokePath();
 
-        this.swapGfx.fillStyle(hexTo0x(Colors.ui.textPrimary), 0.95);
-        this.drawArrowHead(this.swapGfx, 0, 0, r, 25, true);
-        this.drawArrowHead(this.swapGfx, 0, 0, r, 205, true);
+        this.swapGfx.fillStyle(0xffffff, 0.95);
+        this.drawArrowHead(this.swapGfx, 0, 0, r, 20, true);
+        this.drawArrowHead(this.swapGfx, 0, 0, r, 200, true);
 
         this.swapGfx.setDepth(4);
         this.tweens.add({
             targets: this.swapGfx,
             rotation: Phaser.Math.DegToRad(360),
-            duration: 2200,
+            duration: 2600,
             repeat: -1,
+        });
+        this.tweens.add({
+            targets: this.swapGfx,
+            scale: { from: 0.98, to: 1.04 },
+            duration: 1200,
+            yoyo: true,
+            repeat: -1,
+            ease: "Sine.InOut",
         });
     }
 
@@ -297,7 +387,7 @@ export class GameScene extends Phaser.Scene {
         const tangent = angle + (clockwise ? Math.PI / 2 : -Math.PI / 2);
         const dir = new Phaser.Math.Vector2(Math.cos(tangent), Math.sin(tangent));
         const perp = new Phaser.Math.Vector2(-dir.y, dir.x);
-        const size = 8;
+        const size = 9;
 
         const tip = new Phaser.Math.Vector2(ax, ay).add(dir.clone().scale(size));
         const left = new Phaser.Math.Vector2(ax, ay)
@@ -311,21 +401,89 @@ export class GameScene extends Phaser.Scene {
     }
 
     private spawnInitialBubbles() {
-        // Simple start: first 6 rows filled with random colors (3–4 colors)
-        const rows = Math.min(LEVELS.difficulty.baseRows, this.maxRows);
-        const activeColors = Math.min(LEVELS.difficulty.baseColors + 1, 4);
+        // Use LevelManager to get level configuration
+        const params = LevelManager.getParams(this.level, this.cols);
 
-        const palette = Colors.bubblePalette.slice(0, activeColors);
+        // Update scene config from params (e.g. shots, colors)
+        this.shotsLeft = params.shots;
+        this.levelColors = params.colors as HexColor[];
 
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                // Slightly reduce fill on deeper rows for a nicer start
-                if (r >= 4 && Math.random() < 0.15) continue;
+        // Store total rows for scroll reveal
+        this.totalLevelRows = params.rows;
+        this.visibleRowOffset = 0;
 
-                const colorHex = palette[Math.floor(Math.random() * palette.length)];
-                this.placeBubble(r, c, colorHex);
+        // Generate grid
+        const bubbles = LevelManager.generateInitialGrid(params);
+
+        for (const b of bubbles) {
+            this.placeBubble(b.r, b.c, b.colorHex);
+        }
+    }
+
+    private checkAndRevealRows() {
+        // Check if top row (row 0) is empty - if so, scroll everything down and spawn new row
+        let hasTopRowBubble = false;
+        for (const [key, bubble] of this.occupied) {
+            if (bubble.cellR === 0) {
+                hasTopRowBubble = true;
+                break;
             }
         }
+
+        // If top row is empty and we still have rows to reveal, scroll down
+        if (!hasTopRowBubble && this.visibleRowOffset < this.totalLevelRows) {
+            this.scrollBubblesDownAndReveal();
+        }
+    }
+
+    private scrollBubblesDownAndReveal() {
+        // Move all existing bubbles down by 1 row
+        const bubblesToMove: { bubble: BubbleGO; newR: number; newC: number }[] = [];
+
+        for (const [key, bubble] of this.occupied) {
+            bubblesToMove.push({
+                bubble,
+                newR: bubble.cellR + 1,
+                newC: bubble.cellC
+            });
+        }
+
+        // Check if any bubble would go past max rows (game over condition)
+        const maxAllowedRow = this.maxRows - 2;
+        for (const item of bubblesToMove) {
+            if (item.newR > maxAllowedRow) {
+                // Don't scroll if it would push bubbles too low
+                return;
+            }
+        }
+
+        // Clear occupied map
+        this.occupied.clear();
+
+        // Move bubbles to new positions
+        for (const item of bubblesToMove) {
+            const { bubble, newR, newC } = item;
+            const { x, y } = this.cellToWorld(newR, newC);
+
+            bubble.cellR = newR;
+            bubble.cellC = newC;
+            bubble.x = x;
+            bubble.y = y;
+
+            this.occupied.set(this.key(newR, newC), bubble);
+        }
+
+        // Spawn new row at the top (row 0)
+        const cols = this.cols;
+        for (let c = 0; c < cols; c++) {
+            // Random chance to spawn (70% fill rate)
+            if (Math.random() < 0.7) {
+                const colorHex = this.levelColors[Math.floor(Math.random() * this.levelColors.length)] as HexColor;
+                this.placeBubble(0, c, colorHex);
+            }
+        }
+
+        this.visibleRowOffset++;
     }
 
     private setupInput() {
@@ -342,6 +500,197 @@ export class GameScene extends Phaser.Scene {
 
             this.fire(pointer.worldX, pointer.worldY);
         });
+    }
+
+    private setupBoosters() {
+        ensurePhosphorTextures(this);
+        const radius = 28; // Slightly larger buttons
+        const spacing = 90; // More spacing
+        const barPadding = 20;
+        const barW = 100;
+        const barH = spacing * 2 + radius * 2 + barPadding * 2 + 20;
+        const sideGap = 20;
+
+        let barX = this.playfieldRight + sideGap;
+        if (barX + barW > GAME.width - 10) {
+            barX = this.playfieldLeft - barW - sideGap;
+        }
+        barX = Phaser.Math.Clamp(barX, 10, GAME.width - barW - 10);
+
+        const desiredY = this.shooterY - barH / 2;
+        const barY = Phaser.Math.Clamp(
+            desiredY,
+            this.playfieldTop + 12,
+            this.playfieldBottom - barH - 12
+        );
+
+        if (this.boosterBar) this.boosterBar.destroy();
+        this.boosterBar = this.add.graphics();
+
+        // Glassmorphism background
+        this.boosterBar.fillStyle(hexTo0x(Colors.ui.panel), 0.85); // More transparent
+        this.boosterBar.fillRoundedRect(barX, barY, barW, barH, 24);
+        this.boosterBar.lineStyle(2, 0xffffff, 0.1); // Subtle border
+        this.boosterBar.strokeRoundedRect(barX, barY, barW, barH, 24);
+
+        // Inner detail
+        this.boosterBar.fillStyle(0xffffff, 0.03);
+        this.boosterBar.fillRoundedRect(barX + 8, barY + 8, barW - 16, barH - 16, 16);
+
+        this.boosterBar.setDepth(7);
+
+        const startX = barX + barW / 2;
+        const startY = barY + barPadding + radius + 10;
+
+        this.createBoosterButton("colorSwap", startX, startY, Colors.ui.ctaSecondary, "SWAP");
+        this.createBoosterButton("aimGuide", startX, startY + spacing, Colors.ui.reward, "AIM");
+        this.createBoosterButton("bomb", startX, startY + spacing * 2, Colors.ui.warning, "BOMB");
+
+        this.updateBoosterUI();
+    }
+
+    private createBoosterButton(id: BoosterId, x: number, y: number, color: HexColor, label: string) {
+        const radius = 28; // Increased radius to match setupBoosters
+        const container = this.add.container(x, y);
+        const iconId: PhosphorIconId = id === "colorSwap" ? "swap" : id === "aimGuide" ? "aim" : "bomb";
+
+        // Enhanced shadow and depth
+        const shadow = this.add.circle(4, 8, radius + 4, 0x000000, 0.3);
+        const back = this.add.circle(0, 0, radius + 4, 0x000000, 0.4); // Darker border ring
+
+        // Main button body
+        const activeColor = hexTo0x(color);
+        const icon = this.add.circle(0, 0, radius, activeColor, 1);
+
+        // Gradient/lighting effects
+        const innerGlow = this.add.circle(-radius / 3, -radius / 3, radius, 0xffffff, 0.15); // Top-left highlight
+        const innerShade = this.add.circle(radius / 3, radius / 3, radius, 0x000000, 0.1); // Bottom-right shadow
+
+        // Glassy cap
+        const gloss = this.add.circle(0, -radius * 0.5, radius * 0.8, 0xffffff, 0.1);
+        gloss.setScale(1.2, 0.7);
+
+        // Icon
+        const glyph = this.add.image(0, 0, getPhosphorKey(iconId));
+        glyph.setDisplaySize(radius * 1.1, radius * 1.1);
+        glyph.setTint(0xffffff);
+        glyph.setAlpha(0.95);
+
+        // Badge (count) - Positioned at top-right
+        const badgeRadius = 10;
+        const badgeX = radius - 4;
+        const badgeY = -radius + 4;
+        const badge = this.add.circle(badgeX, badgeY, badgeRadius, 0xff3333, 1); // Red notification style
+        badge.setStrokeStyle(2, 0xffffff, 1);
+
+        const count = this.add
+            .text(badgeX, badgeY, String(GameState.boosters[id]), {
+                fontFamily: "Arial, sans-serif",
+                fontSize: "11px",
+                color: "#ffffff",
+                fontStyle: "bold",
+            })
+            .setOrigin(0.5);
+
+        // Label below button
+        const text = this.add
+            .text(0, radius + 14, label, {
+                fontFamily: "Arial, sans-serif",
+                fontSize: "11px",
+                color: Colors.ui.textPrimary, // e.g. white/light grey
+                fontStyle: "bold",
+            })
+            .setOrigin(0.5);
+
+        // Hover effect overlay (invisible by default)
+        const hover = this.add.circle(0, 0, radius, 0xffffff, 0.2);
+        hover.setVisible(false);
+
+        container.add([shadow, back, icon, innerGlow, innerShade, gloss, glyph, text, badge, count, hover]);
+        container.setSize(radius * 2 + 10, radius * 2 + 10);
+
+        // Improve interaction area
+        const hitArea = new Phaser.Geom.Circle(0, 0, radius + 5);
+        container.setInteractive(hitArea, Phaser.Geom.Circle.Contains);
+
+        if (container.input) container.input.cursor = "pointer";
+
+        container.on(
+            "pointerover",
+            () => {
+                hover.setVisible(true);
+                this.tweens.add({
+                    targets: container,
+                    scale: 1.05,
+                    duration: 100,
+                    ease: "Back.easeOut"
+                });
+            }
+        );
+
+        container.on(
+            "pointerout",
+            () => {
+                hover.setVisible(false);
+                this.tweens.add({
+                    targets: container,
+                    scale: 1,
+                    duration: 100,
+                    ease: "Back.easeOut"
+                });
+            }
+        );
+
+        container.on(
+            "pointerdown",
+            (
+                _pointer: Phaser.Input.Pointer,
+                _localX: number,
+                _localY: number,
+                event: Phaser.Types.Input.EventData
+            ) => {
+                event.stopPropagation();
+                this.useBooster(id);
+            }
+        );
+
+        container.setDepth(8);
+
+        this.boosterUI[id] = container;
+        this.boosterCountText[id] = count;
+    }
+
+    private updateBoosterUI() {
+        (Object.keys(GameState.boosters) as BoosterId[]).forEach((id) => {
+            const count = GameState.boosters[id];
+            const container = this.boosterUI[id];
+            const countText = this.boosterCountText[id];
+            if (!container || !countText) return;
+            countText.setText(String(count));
+            container.setAlpha(count > 0 ? 1 : 0.45);
+        });
+    }
+
+    private async useBooster(id: BoosterId) {
+        if (this.gameOver) return;
+        if (this.projectile?.active) return;
+        if (GameState.boosters[id] <= 0) return;
+
+        this.audio.play("sfx_click");
+
+        const success = await GameState.useBooster(id);
+        if (!success) return;
+
+        if (id === "colorSwap") {
+            this.swapLoadedWithQueued();
+        } else if (id === "aimGuide") {
+            this.aimGuideActive = true;
+        } else if (id === "bomb") {
+            this.bombActive = true;
+            this.updateBombIndicator();
+        }
+
+        this.updateBoosterUI();
     }
 
     // -------------------------
@@ -370,11 +719,11 @@ export class GameScene extends Phaser.Scene {
 
         const dir = this.getAimDirection(p.worldX, p.worldY);
 
-        const left = BUBBLES.radius + 8;
-        const right = GAME.width - BUBBLES.radius - 8;
-        const top = this.gridTopY + BUBBLES.radius;
-        const step = 14;
-        const maxSteps = 90;
+        const left = this.playfieldLeft + BUBBLES.radius;
+        const right = this.playfieldRight - BUBBLES.radius;
+        const top = this.playfieldTop + BUBBLES.radius;
+        const step = this.aimGuideActive ? 10 : 14;
+        const maxSteps = this.aimGuideActive ? 120 : 90;
 
         let x = fromX;
         let y = fromY;
@@ -383,7 +732,7 @@ export class GameScene extends Phaser.Scene {
         let hit: { x: number; y: number } | null = null;
 
         this.aimLine.clear();
-        this.aimLine.fillStyle(hexTo0x(this.nextColor), 0.65);
+        this.aimLine.fillStyle(hexTo0x(this.nextColor), this.aimGuideActive ? 0.85 : 0.6);
 
         for (let i = 0; i < maxSteps; i++) {
             x += vx * step;
@@ -403,7 +752,7 @@ export class GameScene extends Phaser.Scene {
             }
 
             if (i % 2 === 0) {
-                this.aimLine.fillCircle(x, y, 3);
+                this.aimLine.fillCircle(x, y, this.aimGuideActive ? 3.5 : 3);
             }
         }
 
@@ -421,6 +770,8 @@ export class GameScene extends Phaser.Scene {
     private fire(targetX: number, targetY: number) {
         if (!this.nextBubble) return;
 
+        this.audio.play("sfx_shoot");
+
         // Direction from shooter to target
         const dir = this.getAimDirection(targetX, targetY);
 
@@ -434,6 +785,7 @@ export class GameScene extends Phaser.Scene {
             vx: dir.x * BUBBLES.launchSpeedPxPerSec,
             vy: dir.y * BUBBLES.launchSpeedPxPerSec,
             active: true,
+            isBomb: this.bombActive,
         };
         this.projectile.go.setDepth(7);
         this.nextBubble = undefined;
@@ -443,6 +795,13 @@ export class GameScene extends Phaser.Scene {
         this.hud?.setShots(this.shotsLeft);
 
         // Prepare next
+        if (this.aimGuideActive) {
+            this.aimGuideActive = false;
+        }
+        if (this.bombActive) {
+            this.bombActive = false;
+            this.updateBombIndicator();
+        }
         this.promoteQueuedBubble();
 
         // Quick feedback
@@ -503,25 +862,7 @@ export class GameScene extends Phaser.Scene {
 
         if (x === undefined || y === undefined) return;
 
-        const float = this.add
-            .text(x, y - 6, `+${safe}`, {
-                fontFamily: "Arial, sans-serif",
-                fontSize: "22px",
-                color: Colors.ui.reward,
-                fontStyle: "bold",
-            })
-            .setOrigin(0.5);
-        float.setDepth(20);
-        float.setShadow(0, 2, Colors.ui.shadow, 6, true, true);
-
-        this.tweens.add({
-            targets: float,
-            y: y - 44,
-            alpha: 0,
-            duration: 520,
-            ease: "Quad.Out",
-            onComplete: () => float.destroy(),
-        });
+        this.effectManager.spawnFloatingText(x, y, `+${safe}`, 0xffd700);
     }
 
     private playPop(bubble: BubbleGO) {
@@ -543,51 +884,23 @@ export class GameScene extends Phaser.Scene {
     }
 
     private spawnPopBurst(x: number, y: number, colorHex: HexColor, radius: number) {
+        this.effectManager.spawnPopParticles(x, y, colorHex, 10);
+
+        // Simple ring expand for extra impact
         const ring = this.add.circle(x, y, radius, 0xffffff, 0);
         ring.setStrokeStyle(3, hexTo0x(colorHex), 0.8);
         ring.setDepth(9);
 
         this.tweens.add({
             targets: ring,
-            scale: 1.4,
+            scale: 1.5,
             alpha: 0,
-            duration: 260,
+            duration: 300,
             ease: "Quad.Out",
             onComplete: () => ring.destroy(),
         });
-
-        const core = this.add.circle(x, y, radius * 0.6, hexTo0x(colorHex), 0.35);
-        core.setDepth(8);
-        this.tweens.add({
-            targets: core,
-            scale: 1.5,
-            alpha: 0,
-            duration: 200,
-            ease: "Quad.Out",
-            onComplete: () => core.destroy(),
-        });
-
-        const count = 8;
-        for (let i = 0; i < count; i++) {
-            const angle = (Math.PI * 2 * i) / count + Phaser.Math.FloatBetween(-0.15, 0.15);
-            const dist = Phaser.Math.Between(10, 22);
-            const size = Phaser.Math.Between(3, 6);
-
-            const dot = this.add.circle(x, y, size, hexTo0x(colorHex), 0.9);
-            dot.setDepth(9);
-
-            this.tweens.add({
-                targets: dot,
-                x: x + Math.cos(angle) * dist,
-                y: y + Math.sin(angle) * dist,
-                alpha: 0,
-                scale: 0.2,
-                duration: 260,
-                ease: "Quad.Out",
-                onComplete: () => dot.destroy(),
-            });
-        }
     }
+
 
     private removeFloatingBubbles(): number {
         const connected = new Set<CellKey>();
@@ -695,6 +1008,8 @@ export class GameScene extends Phaser.Scene {
         if (this.aimGhost?.visible) {
             this.aimGhost.setFillStyle(hexTo0x(this.nextColor), 0.35);
         }
+
+        this.updateBombIndicator();
     }
 
     private promoteQueuedBubble() {
@@ -713,6 +1028,7 @@ export class GameScene extends Phaser.Scene {
         this.nextBubble.setDepth(5);
         this.nextBubble.setScale(startScale);
         this.bindSwapHandler(this.nextBubble);
+        this.updateBombIndicator();
         this.tweens.add({
             targets: this.nextBubble,
             x: this.shooterX,
@@ -749,13 +1065,13 @@ export class GameScene extends Phaser.Scene {
         const available = this.getAvailableColors();
         if (available.length === 0) return randomBubbleHex();
         if (!avoid || available.length === 1) {
-            return available[Math.floor(Math.random() * available.length)];
+            return available[Math.floor(Math.random() * available.length)]!;
         }
         const filtered = available.filter((c) => c !== avoid);
         if (filtered.length === 0) {
-            return available[Math.floor(Math.random() * available.length)];
+            return available[Math.floor(Math.random() * available.length)]!;
         }
-        return filtered[Math.floor(Math.random() * filtered.length)];
+        return filtered[Math.floor(Math.random() * filtered.length)]!;
     }
 
     private ensureNextColorsValid() {
@@ -774,6 +1090,8 @@ export class GameScene extends Phaser.Scene {
             this.queuedColor = this.pickAvailableColor(this.nextColor);
             this.setBubbleColor(this.queuedBubble, this.queuedColor);
         }
+
+        this.updateBombIndicator();
     }
 
     private destroyProjectile() {
@@ -793,16 +1111,41 @@ export class GameScene extends Phaser.Scene {
     // Grid + Placement
     // -------------------------
 
-    private snapProjectileToGrid(worldX: number, worldY: number, colorHex: HexColor) {
+    private snapProjectileToGrid(
+        worldX: number,
+        worldY: number,
+        colorHex: HexColor,
+        isBomb = false
+    ) {
         const best = this.findNearestEmptyCell(worldX, worldY);
         if (!best) return;
 
         const { r, c } = best;
         const placed = this.placeBubble(r, c, colorHex);
 
+        if (isBomb) {
+            this.audio.play("sfx_pop");
+            this.effectManager.shake(0.01, 200);
+            const toRemove = [placed, ...this.getNeighborsBubbles(placed.cellR, placed.cellC)];
+            const unique = new Set<BubbleGO>();
+            for (const b of toRemove) unique.add(b);
+            for (const b of unique) {
+                this.occupied.delete(this.key(b.cellR, b.cellC));
+                this.playPop(b);
+            }
+            const dropped = this.removeFloatingBubbles();
+            if (dropped > 0) {
+                this.addScore(dropped * 5);
+            }
+            this.ensureNextColorsValid();
+            return;
+        }
+
         // Match & remove
         const match = this.findMatchGroup(placed);
         if (match.length >= BUBBLES.minMatchCount) {
+            this.audio.play("sfx_pop");
+            this.effectManager.shake(0.004, 120);
             for (const b of match) {
                 this.occupied.delete(this.key(b.cellR, b.cellC));
                 this.playPop(b);
@@ -815,10 +1158,14 @@ export class GameScene extends Phaser.Scene {
             }
 
             this.ensureNextColorsValid();
+
+            // Scroll reveal: check if we should reveal more rows from top
+            this.checkAndRevealRows();
         }
 
         // Win condition (minimal): if no bubbles remain, next level
         if (this.occupied.size === 0) {
+            this.audio.play("sfx_win");
             this.level += 1;
             this.restartForNextLevel();
         }
@@ -859,9 +1206,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     private cellToWorld(r: number, c: number): { x: number; y: number } {
-        const margin = 18;
         const rowOffset = (r % 2) * (BUBBLES.radius);
-        const x = margin + rowOffset + c * this.hSpacing + BUBBLES.radius;
+        const x = this.playfieldLeft + rowOffset + c * this.hSpacing + BUBBLES.radius;
         const y = this.gridTopY + r * this.vSpacing + BUBBLES.radius;
         return { x, y };
     }
@@ -949,11 +1295,21 @@ export class GameScene extends Phaser.Scene {
         return res;
     }
 
+    private getNeighborsBubbles(r: number, c: number): BubbleGO[] {
+        const out: BubbleGO[] = [];
+        for (const nb of this.neighbors(r, c)) {
+            const b = this.occupied.get(this.key(nb.r, nb.c));
+            if (b) out.push(b);
+        }
+        return out;
+    }
+
     // -------------------------
     // Lose / Next level
     // -------------------------
 
     private showLosePopup() {
+        this.audio.play("sfx_lose");
         this.gameOver = true;
         this.aimLine?.clear();
         this.aimLine?.setVisible(false);
@@ -1026,23 +1382,29 @@ export class GameScene extends Phaser.Scene {
     private makeBubbleVisual(x: number, y: number, colorHex: HexColor, radius: number): BubbleVisual {
         const bubble = this.add.container(x, y) as BubbleVisual;
 
-        const shadow = this.add.circle(2, 4, radius, 0x000000, 0.18);
+        const shadow = this.add.circle(4, 7, radius * 1.03, 0x000000, 0.3);
         const base = this.add.circle(0, 0, radius, hexTo0x(colorHex));
-        base.setStrokeStyle(3, hexTo0x(Colors.ui.textPrimary), 0.35);
+        base.setStrokeStyle(2, 0xffffff, 0.25);
 
-        const shade = this.add.circle(radius * 0.25, radius * 0.3, radius * 0.75, 0x000000, 0.12);
-        const gloss = this.add.circle(-radius * 0.35, -radius * 0.35, radius * 0.35, 0xffffff, 0.55);
-        const sparkle = this.add.circle(-radius * 0.12, -radius * 0.55, Math.max(2, radius * 0.12), 0xffffff, 0.6);
-        shade.setBlendMode(Phaser.BlendModes.MULTIPLY);
+        const innerShade = this.add.circle(radius * 0.22, radius * 0.3, radius * 0.92, 0x000000, 0.22);
+        const rim = this.add.circle(0, 0, radius * 0.98, 0xffffff, 0);
+        rim.setStrokeStyle(2, 0xffffff, 0.15);
+
+        const gloss = this.add.circle(-radius * 0.34, -radius * 0.36, radius * 0.34, 0xffffff, 0.4);
+        const glossSoft = this.add.circle(-radius * 0.12, -radius * 0.08, radius * 0.7, 0xffffff, 0.04);
+        const sparkle = this.add.circle(-radius * 0.12, -radius * 0.56, Math.max(2, radius * 0.12), 0xffffff, 0.55);
+
+        innerShade.setBlendMode(Phaser.BlendModes.MULTIPLY);
+        glossSoft.setBlendMode(Phaser.BlendModes.SCREEN);
         gloss.setBlendMode(Phaser.BlendModes.SCREEN);
         sparkle.setBlendMode(Phaser.BlendModes.SCREEN);
 
-        bubble.add([shadow, base, shade, gloss, sparkle]);
+        bubble.add([shadow, base, innerShade, rim, glossSoft, gloss, sparkle]);
         bubble.setSize(radius * 2, radius * 2);
 
         bubble.base = base;
         bubble.gloss = gloss;
-        bubble.shade = shade;
+        bubble.shade = innerShade;
         bubble.bubbleRadius = radius;
         bubble.colorHex = colorHex;
 
@@ -1052,5 +1414,11 @@ export class GameScene extends Phaser.Scene {
     private setBubbleColor(bubble: BubbleVisual, colorHex: HexColor) {
         bubble.base.setFillStyle(hexTo0x(colorHex));
         bubble.colorHex = colorHex;
+    }
+
+    private updateBombIndicator() {
+        if (!this.nextBubble) return;
+        const strokeColor = this.bombActive ? Colors.ui.warning : Colors.ui.textPrimary;
+        this.nextBubble.base.setStrokeStyle(2, hexTo0x(strokeColor), this.bombActive ? 0.9 : 0.25);
     }
 }

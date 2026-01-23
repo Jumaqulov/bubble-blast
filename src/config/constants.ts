@@ -22,8 +22,8 @@ export const INPUT = {
 
 export const BUBBLES = {
     // Visual / grid tuning
-    radius: 28,               // bubble radius in px (design resolution)
-    diameter: 56,
+    radius: 24,               // bubble radius in px (design resolution)
+    diameter: 48,
     snapThresholdPx: 18,      // how close to a snap point to lock in
     launchSpeedPxPerSec: 1100, // projectile speed
 

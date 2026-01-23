@@ -8,23 +8,23 @@ export const Colors = {
     // ---- UI (Global) ----
     ui: {
         // Backgrounds
-        background: "#1E3A8A" as HexColor, // Primary Background (Deep Blue)
-        backgroundDeep: "#162B63" as HexColor, // Background gradient depth
-        panel: "#374151" as HexColor,      // Secondary/Panel Background (Dark Gray)
-        playfield: "#1C3574" as HexColor,  // Gameplay area background
-        playfieldBorder: "#2F4C94" as HexColor, // Gameplay area outline
+        background: "#0F2636" as HexColor, // Rebrand: Deep Teal Navy
+        backgroundDeep: "#08161F" as HexColor, // Background gradient depth
+        panel: "#24323C" as HexColor,      // HUD / Panel
+        playfield: "#113144" as HexColor,  // Gameplay area background
+        playfieldBorder: "#2C5E6B" as HexColor, // Gameplay area outline
 
         // Text
-        textPrimary: "#FFFFFF" as HexColor,
-        textSecondary: "#E5E7EB" as HexColor,
+        textPrimary: "#F2F6F9" as HexColor,
+        textSecondary: "#C5D2DB" as HexColor,
 
         // Buttons / Actions
-        ctaPrimaryTop: "#22C55E" as HexColor,    // CTA gradient top
-        ctaPrimaryBottom: "#16A34A" as HexColor, // CTA gradient bottom
-        ctaSecondary: "#10B981" as HexColor,     // Confirm / OK
+        ctaPrimaryTop: "#3BC174" as HexColor,    // CTA gradient top
+        ctaPrimaryBottom: "#2A9D62" as HexColor, // CTA gradient bottom
+        ctaSecondary: "#2FBF7D" as HexColor,     // Confirm / OK
 
         // Status
-        reward: "#FACC15" as HexColor, // Coin / Bonus / Reward
+        reward: "#F5C65A" as HexColor, // Coin / Bonus / Reward
         warning: "#EF4444" as HexColor, // Fail / Error
         disabled: "#9CA3AF" as HexColor, // Locked / Disabled
 

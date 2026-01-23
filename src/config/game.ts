@@ -6,6 +6,7 @@ import { Colors, hexTo0x } from "./colors";
 import { BootScene } from "../scenes/BootScene";
 import { MenuScene } from "../scenes/MenuScene";
 import { GameScene } from "../scenes/GameScene";
+import { ShopScene } from "../scenes/ShopScene";
 
 export function createPhaserConfig(): Phaser.Types.Core.GameConfig {
     return {
@@ -40,6 +41,6 @@ export function createPhaserConfig(): Phaser.Types.Core.GameConfig {
             windowEvents: true,
         },
 
-        scene: [BootScene, MenuScene, GameScene],
+        scene: [BootScene, MenuScene, ShopScene, GameScene],
     };
 }

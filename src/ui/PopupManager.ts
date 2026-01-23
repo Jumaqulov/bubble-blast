@@ -49,7 +49,7 @@ export class PopupManager {
         const h = opts.height ?? 360;
 
         const overlay = this.scene.add.graphics();
-        overlay.fillStyle(0x000000, 0.5);
+        overlay.fillStyle(0x000000, 0.55);
         overlay.fillRect(0, 0, GAME.width, GAME.height);
 
         // block input behind popup
@@ -58,9 +58,24 @@ export class PopupManager {
             Phaser.Geom.Rectangle.Contains
         );
 
-        const panel = this.scene.add
-            .rectangle(GAME.width / 2, GAME.height / 2, w, h, hexTo0x(Colors.ui.panel))
-            .setStrokeStyle(4, hexTo0x(Colors.ui.textSecondary), 0.5);
+        const panelX = GAME.width / 2 - w / 2;
+        const panelY = GAME.height / 2 - h / 2;
+        const panelGfx = this.scene.add.graphics();
+        panelGfx.fillStyle(0x000000, 0.3);
+        panelGfx.fillRoundedRect(panelX + 6, panelY + 10, w, h, 22);
+
+        panelGfx.fillStyle(hexTo0x(Colors.ui.panel), 0.98);
+        panelGfx.fillRoundedRect(panelX, panelY, w, h, 22);
+
+        panelGfx.fillStyle(0xffffff, 0.08);
+        panelGfx.fillRoundedRect(panelX + 12, panelY + 12, w - 24, 18, 10);
+        panelGfx.fillStyle(0x000000, 0.2);
+        panelGfx.fillRoundedRect(panelX + 12, panelY + h - 28, w - 24, 16, 10);
+
+        panelGfx.lineStyle(2, hexTo0x(Colors.ui.playfieldBorder), 0.8);
+        panelGfx.strokeRoundedRect(panelX, panelY, w, h, 22);
+        panelGfx.lineStyle(2, 0xffffff, 0.12);
+        panelGfx.strokeRoundedRect(panelX + 4, panelY + 4, w - 8, h - 8, 18);
 
         const title = this.scene.add
             .text(GAME.width / 2, GAME.height / 2 - h / 2 + 56, opts.title, {
@@ -119,7 +134,7 @@ export class PopupManager {
 
         this.container = this.scene.add.container(0, 0, [
             overlay,
-            panel,
+            panelGfx,
             title,
             body,
             ...btns,

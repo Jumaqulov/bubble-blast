@@ -1,0 +1,31 @@
+{
+    "id": 2,
+    "rows": 25,
+    "cols": 10,
+    "shots": 50,
+    "waves": 10,
+    "colors": [
+        "#3B82F6",
+        "#F59E0B",
+        "#A855F7"
+    ],
+    "grid": [
+        "BBBYYYPPPP",
+        "YYYPPPPBBB",
+        "PPPBBBBYYY",
+        "BBBYYYPPPP",
+        "YYYPPPPBBB",
+        "PPPBBBBYYY",
+        "BBBYYYPPPP",
+        "..........",
+        "..........",
+        "..........",
+        "..........",
+        ".........."
+    ],
+    "map": {
+        "B": "#3B82F6",
+        "Y": "#F59E0B",
+        "P": "#A855F7"
+    }
+}

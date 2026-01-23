@@ -9,6 +9,17 @@ export class BootScene extends Phaser.Scene {
         super({ key: "BootScene" });
     }
 
+    preload() {
+        this.load.setPath("assets/audio");
+        this.load.audio("bgm_main", "bgm_main.mp3");
+        this.load.audio("sfx_shoot", "shoot.mp3");
+        this.load.audio("sfx_pop", "pop.mp3");
+        this.load.audio("sfx_bounce", "bounce.mp3");
+        this.load.audio("sfx_win", "win.mp3");
+        this.load.audio("sfx_lose", "lose.mp3");
+        this.load.audio("sfx_click", "click.mp3");
+    }
+
     async create() {
         // Solid background immediately
         this.cameras.main.setBackgroundColor(hexTo0x(Colors.ui.background));
@@ -16,11 +27,12 @@ export class BootScene extends Phaser.Scene {
         // Ensure consistent scaling on resize
         this.setupScaleHandlers();
 
-        // Unlock audio on first user gesture (Chrome autoplay policy)
         this.input.once("pointerdown", () => {
-            const ctx = this.sound?.context;
-            if (ctx && ctx.state === "suspended") {
-                ctx.resume().catch(() => undefined);
+            if (this.sound instanceof Phaser.Sound.WebAudioSoundManager) {
+                const ctx = this.sound.context;
+                if (ctx && ctx.state === "suspended") {
+                    ctx.resume().catch(() => undefined);
+                }
             }
         });
 
