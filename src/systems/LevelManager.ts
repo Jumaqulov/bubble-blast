@@ -1,5 +1,6 @@
 import { Colors, HexColor } from "../config/colors";
 import { LEVELS } from "../config/constants";
+import { LevelGenerator } from "./LevelGenerator";
 import level1 from "../data/levels/level_1.json";
 import level2 from "../data/levels/level_2.json";
 
@@ -121,22 +122,7 @@ export class LevelManager {
         }
 
         // Procedural generation (fallback)
-        for (let r = 0; r < params.rows; r++) {
-            for (let c = 0; c < params.cols; c++) {
-                // Light randomness: keep top denser than bottom
-                const skipChance =
-                    r <= 2 ? 0 :
-                        r <= 4 ? 0.08 :
-                            0.16;
-
-                if (Math.random() < skipChance) continue;
-
-                const colorHex = randomFrom(params.activeColors);
-                bubbles.push({ r, c, colorHex });
-            }
-        }
-
-        return bubbles;
+        return LevelGenerator.generate(params.level, params.rows, params.cols, params.activeColors);
     }
 
     static pickNextBubbleColor(params: LevelParams): HexColor {
