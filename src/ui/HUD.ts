@@ -42,9 +42,9 @@ export class HUD extends Phaser.GameObjects.Container {
 
         // 1. Asosiy Panel (Fon)
         this.bg = scene.add.graphics();
-        this.bg.fillStyle(0x1A365D, 0.9); // To'q ko'k
+        this.bg.fillStyle(0x020617, 0.9); // Juda to'q ko'k (Slate-950)
         this.bg.fillRoundedRect(barX, barY, barW, barH - 10, 16);
-        this.bg.lineStyle(2, 0x4AA6EB, 0.5);
+        this.bg.lineStyle(2, 0x38BDF8, 0.8); // Yorqin havorang chiziq
         this.bg.strokeRoundedRect(barX, barY, barW, barH - 10, 16);
 
         // 2. PROGRESS BAR (O'rtada)
@@ -54,11 +54,12 @@ export class HUD extends Phaser.GameObjects.Container {
         const pbY = barY + 42;
         this.barWidth = pbW;
 
-        // Bar orqasi (kulrang) - barBg ga biriktiramiz
-        this.barBg = scene.add.rectangle(GAME.width / 2, pbY + pbH / 2, pbW, pbH, 0x1E293B).setDepth(1);
-        this.barBg.setStrokeStyle(3, 0x475569);
+        // Bar orqasi (qora) - barBg ga biriktiramiz
+        // Kontrastni oshirish uchun qora fon (0x000000) va oq ramka (0xFFFFFF)
+        this.barBg = scene.add.rectangle(GAME.width / 2, pbY + pbH / 2, pbW, pbH, 0x000000).setDepth(1);
+        this.barBg.setStrokeStyle(2, 0xFFFFFF);
 
-        // Bar to'lishi (Sariq-Gradient effekt uchun oddiy sariq hozircha)
+        // Bar to'lishi (Sariq)
         this.barFill = scene.add.rectangle(pbX, pbY, 0, pbH, 0xFACC15).setOrigin(0, 0).setDepth(2);
 
         // Mask (Bar to'lganda chetidan chiqib ketmasligi uchun)
