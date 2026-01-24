@@ -17,6 +17,8 @@ import { LevelManager } from "../systems/LevelManager";
 import { ShootingSystem } from "../systems/ShootingSystem";
 import { AudioManager } from "../systems/AudioManager";
 import { GameState } from "../state/GameState";
+import { OutOfShotsPopup } from "../ui/OutOfShotsPopup";
+import { YandexSDK } from "../services/YandexSDK";
 
 type CellKey = string;
 
@@ -130,6 +132,7 @@ export class GameScene extends Phaser.Scene {
         this.setupInput();
 
         this.drawHUD();
+
     }
 
     update(_t: number, dtMs: number) {
@@ -231,6 +234,35 @@ export class GameScene extends Phaser.Scene {
         gfx.moveTo(panelX + panelW, 0);
         gfx.lineTo(panelX + panelW, GAME.height);
         gfx.strokePath();
+
+        // --- Ceiling Visuals (Shift Chizig'i) ---
+        // Top "Danger/Ceiling" bar decoration
+        const ceilingY = 140;
+        gfx.fillStyle(0x334155, 1); // Darker slate
+        gfx.fillRect(panelX, ceilingY - 10, panelW, 10);
+
+        // Striped warning pattern for ceiling line
+        const warningGfx = this.add.graphics();
+        warningGfx.setDepth(-98);
+        const stripeW = 20;
+        warningGfx.fillStyle(0xFFFFFF, 0.1);
+
+        // Create mask for warning stripe area
+        const warningMaskShape = this.make.graphics();
+        warningMaskShape.fillStyle(0xffffff);
+        warningMaskShape.fillRect(panelX, ceilingY - 10, panelW, 10);
+        const warningMask = warningMaskShape.createGeometryMask();
+        warningGfx.setMask(warningMask);
+
+        for (let i = 0; i < panelW / stripeW + 2; i++) {
+            warningGfx.beginPath();
+            warningGfx.moveTo(panelX + i * stripeW * 2, ceilingY - 10);
+            warningGfx.lineTo(panelX + i * stripeW * 2 + stripeW, ceilingY - 10);
+            warningGfx.lineTo(panelX + i * stripeW * 2 + stripeW - 10, ceilingY);
+            warningGfx.lineTo(panelX + i * stripeW * 2 - 10, ceilingY);
+            warningGfx.closePath();
+            warningGfx.fillPath();
+        }
 
         // O'yin maydoni chegaralarini yangilash
         this.playfieldLeft = panelX + 18; // Biroz ichkariga
@@ -1132,8 +1164,35 @@ export class GameScene extends Phaser.Scene {
 
         // Lose check (minimal): if shots finished, show overlay and return menu
         if (this.shotsLeft <= 0) {
-            this.showLosePopup();
+            this.handleOutOfShots();
         }
+    }
+
+    private handleOutOfShots() {
+        this.gameOver = true; // Pause input
+        this.aimLine?.setVisible(false);
+        this.hideAimGhost();
+
+        const popup = new OutOfShotsPopup(
+            this,
+            () => {
+                // On Watch Ad
+                YandexSDK.showRewarded().then((success) => {
+                    if (success) {
+                        this.shotsLeft += 5;
+                        this.hud?.setShots(this.shotsLeft);
+                        this.gameOver = false; // Resume
+                    } else {
+                        this.showLosePopup();
+                    }
+                });
+            },
+            () => {
+                // On Give Up
+                this.showLosePopup();
+            }
+        );
+        this.add.existing(popup);
     }
 
     // -------------------------

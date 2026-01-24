@@ -59,10 +59,10 @@ export const LEVELS = {
         maxColors: 6,
 
         // Shots/moves per level (lower = harder)
-        baseShots: 35,
-        minShots: 18,
+        baseShots: 25,
+        minShots: 15,
         // shots decrease every N levels (difficulty increase)
-        shotsDecreaseEveryLevels: 6,
+        shotsDecreaseEveryLevels: 8,
     },
 } as const;
 

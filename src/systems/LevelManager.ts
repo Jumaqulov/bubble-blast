@@ -1,63 +1,10 @@
 import { Colors, HexColor } from "../config/colors";
 import { LEVELS } from "../config/constants";
-import level1 from "../data/levels/level_1.json";
-import level2 from "../data/levels/level_2.json";
-
-export type LevelParams = {
-    level: number;
-    rows: number;
-    cols: number;
-    activeColors: HexColor[];
-    colors: string[];  // Raw color strings from JSON
-    shots: number;
-    waves?: number;  // Number of waves for continuous spawning
-    gridData?: string[]; // Grid pattern from JSON
-    colorMap?: Record<string, string>; // Char to Hex map
-};
-
-export type InitialBubble = {
-    r: number;
-    c: number;
-    colorHex: HexColor;
-};
+import { LevelGenerator } from "./LevelGenerator";
+import { InitialBubble, LevelParams } from "../types/LevelTypes";
 
 export class LevelManager {
     static getParams(level: number, cols: number): LevelParams {
-        // Handle JSON module interop (some bundlers put content in .default)
-        const l1 = (level1 as any).default || level1;
-        const l2 = (level2 as any).default || level2;
-
-        // Load specific level based on number
-        if (level === 1) {
-            console.log("LevelManager: Loading Level 1 JSON data", l1);
-            return {
-                level: 1,
-                rows: l1.rows,
-                cols: l1.cols,
-                activeColors: l1.colors as HexColor[],
-                colors: l1.colors,
-                shots: l1.shots,
-                waves: l1.waves ?? 5,
-                gridData: l1.grid,
-                colorMap: l1.map,
-            };
-        }
-
-        if (level === 2) {
-            console.log("LevelManager: Loading Level 2 JSON data", l2);
-            return {
-                level: 2,
-                rows: l2.rows,
-                cols: l2.cols,
-                activeColors: l2.colors as HexColor[],
-                colors: l2.colors,
-                shots: l2.shots,
-                waves: l2.waves ?? 6,
-                gridData: l2.grid,
-                colorMap: l2.map,
-            };
-        }
-
         const L = Math.max(1, Math.floor(level));
 
         // Rows difficulty curve (procedural fallback)
@@ -94,49 +41,8 @@ export class LevelManager {
     }
 
     static generateInitialGrid(params: LevelParams): InitialBubble[] {
-        const bubbles: InitialBubble[] = [];
-
-        // If we have specific grid data from JSON
-        console.log("LevelManager: Generating grid. Params:", { level: params.level, hasGrid: !!params.gridData, hasMap: !!params.colorMap });
-
-        if (params.gridData && params.colorMap) {
-            console.log("LevelManager: Using JSON grid data");
-            const grid = params.gridData;
-            const map = params.colorMap;
-
-            for (let r = 0; r < grid.length; r++) {
-                const rowStr = grid[r];
-                if (!rowStr) continue;
-                for (let c = 0; c < rowStr.length; c++) {
-                    const char = rowStr[c];
-                    if (!char || char === '.' || char === ' ') continue;
-
-                    const color = map[char];
-                    if (color) {
-                        bubbles.push({ r, c, colorHex: color as HexColor });
-                    }
-                }
-            }
-            return bubbles;
-        }
-
         // Procedural generation (fallback)
-        for (let r = 0; r < params.rows; r++) {
-            for (let c = 0; c < params.cols; c++) {
-                // Light randomness: keep top denser than bottom
-                const skipChance =
-                    r <= 2 ? 0 :
-                        r <= 4 ? 0.08 :
-                            0.16;
-
-                if (Math.random() < skipChance) continue;
-
-                const colorHex = randomFrom(params.activeColors);
-                bubbles.push({ r, c, colorHex });
-            }
-        }
-
-        return bubbles;
+        return LevelGenerator.generate(params.level, params.rows, params.cols, params.activeColors);
     }
 
     static pickNextBubbleColor(params: LevelParams): HexColor {
