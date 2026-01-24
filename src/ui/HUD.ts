@@ -48,48 +48,67 @@ export class HUD extends Phaser.GameObjects.Container {
         this.bg.strokeRoundedRect(barX, barY, barW, barH - 10, 16);
 
         // 2. PROGRESS BAR (O'rtada)
-        const pbW = 320;
-        const pbH = 24;
+        const pbW = 340; // Wider
+        const pbH = 32;  // Taller
         const pbX = GAME.width / 2 - pbW / 2;
-        const pbY = barY + 45;
+        const pbY = barY + 42;
         this.barWidth = pbW;
 
         // Bar orqasi (kulrang) - barBg ga biriktiramiz
-        this.barBg = scene.add.rectangle(GAME.width / 2, pbY + pbH / 2, pbW, pbH, 0x334155).setDepth(1);
-        this.barBg.setStrokeStyle(2, 0x475569); // Cheti ham ochroq
+        this.barBg = scene.add.rectangle(GAME.width / 2, pbY + pbH / 2, pbW, pbH, 0x1E293B).setDepth(1);
+        this.barBg.setStrokeStyle(3, 0x475569);
 
-        // Bar to'lishi (Sariq)
-        this.barFill = scene.add.rectangle(pbX, pbY, 0, pbH, 0xFACC15).setOrigin(0, 0).setDepth(2); // Yellow-400
+        // Bar to'lishi (Sariq-Gradient effekt uchun oddiy sariq hozircha)
+        this.barFill = scene.add.rectangle(pbX, pbY, 0, pbH, 0xFACC15).setOrigin(0, 0).setDepth(2);
 
         // Mask (Bar to'lganda chetidan chiqib ketmasligi uchun)
         this.barMask = scene.add.graphics();
         this.barMask.fillStyle(0xffffff);
-        this.barMask.fillRoundedRect(pbX, pbY, pbW, pbH, 8);
+        this.barMask.fillRoundedRect(pbX, pbY, pbW, pbH, 12); // Rounder corners
         const mask = this.barMask.createGeometryMask();
         this.barFill.setMask(mask);
         this.barBg.setMask(mask);
 
         // Yulduzchalar (3 ta)
-        const starPositions = [0.33, 0.66, 1.0];
+        const starPositions = [0.33, 0.66, 0.98]; // 1.0 would be partially cut off
         starPositions.forEach((pos) => {
             const sx = pbX + pbW * pos;
             const sy = pbY + pbH / 2;
 
             // Bo'sh yulduz (foni)
+            // Stroke effekti berish uchun bir oz kattaroq qora yulduz orqasiga
+            const starShadow = scene.add.image(sx, sy + 2, getPhosphorKey("starFilled"));
+            starShadow.setDisplaySize(42, 42);
+            starShadow.setTint(0x000000);
+            starShadow.setAlpha(0.5);
+            starShadow.setDepth(3);
+
             const starBg = scene.add.image(sx, sy, getPhosphorKey("starFilled"));
-            starBg.setDisplaySize(28, 28);
-            starBg.setTint(0x64748B); 
-            starBg.setDepth(3);
+            starBg.setDisplaySize(36, 36); // Kattaroq
+            starBg.setTint(0x475569); // Slate-600
+            starBg.setDepth(4);
 
             // Yonadigan yulduz (ustida)
             const star = scene.add.image(sx, sy, getPhosphorKey("starFilled"));
-            star.setDisplaySize(28, 28);
-            star.setTint(0xFACC15); // Yonuvchi sariq
-            star.setDepth(4);
+            star.setDisplaySize(36, 36);
+            star.setTint(0xFDE047); // Yellow-300 (Yorqinroq)
+            star.setDepth(5);
             star.setVisible(false); // Boshida ko'rinmaydi
 
+            // Glow effekti (yonib turganda)
+            const glow = scene.add.image(sx, sy, getPhosphorKey("starFilled"));
+            glow.setDisplaySize(48, 48);
+            glow.setTint(0xFFFFFF);
+            glow.setAlpha(0.4);
+            glow.setBlendMode(Phaser.BlendModes.ADD);
+            glow.setDepth(6);
+            glow.setVisible(false);
+
+            // Star objectiga glow ni ham biriktirib qo'yamiz, keyin updateProgress da ishlatamiz
+            (star as any).glow = glow;
+
             this.stars.push(star);
-            this.add([starBg, star]);
+            this.add([starShadow, starBg, star, glow]);
         });
 
         // 3. TEXTLAR
@@ -137,12 +156,24 @@ export class HUD extends Phaser.GameObjects.Container {
         const starThresholds = [0.33, 0.66, 0.99];
         this.stars.forEach((star, idx) => {
             const threshold = starThresholds[idx];
-            // TypeScript: threshold undefined emasligiga ishonch hosil qilamiz
             if (threshold !== undefined && pct >= threshold) {
                 if (!star.visible) {
                     star.setVisible(true);
-                    star.setScale(1.5);
-                    this.scene.tweens.add({ targets: star, scale: 1, duration: 200, ease: 'Back.Out' });
+                    star.setScale(2.5);
+                    this.scene.tweens.add({ targets: star, scale: 1, duration: 400, ease: 'Elastic.Out' });
+
+                    const glow = (star as any).glow;
+                    if (glow) {
+                        glow.setVisible(true);
+                        this.scene.tweens.add({
+                            targets: glow,
+                            alpha: { from: 0.6, to: 0.2 },
+                            scale: { from: 1, to: 1.2 },
+                            yoyo: true,
+                            repeat: -1,
+                            duration: 800
+                        });
+                    }
                 }
             }
         });

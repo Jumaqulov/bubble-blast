@@ -235,6 +235,35 @@ export class GameScene extends Phaser.Scene {
         gfx.lineTo(panelX + panelW, GAME.height);
         gfx.strokePath();
 
+        // --- Ceiling Visuals (Shift Chizig'i) ---
+        // Top "Danger/Ceiling" bar decoration
+        const ceilingY = 140;
+        gfx.fillStyle(0x334155, 1); // Darker slate
+        gfx.fillRect(panelX, ceilingY - 10, panelW, 10);
+
+        // Striped warning pattern for ceiling line
+        const warningGfx = this.add.graphics();
+        warningGfx.setDepth(-98);
+        const stripeW = 20;
+        warningGfx.fillStyle(0xFFFFFF, 0.1);
+
+        // Create mask for warning stripe area
+        const warningMaskShape = this.make.graphics();
+        warningMaskShape.fillStyle(0xffffff);
+        warningMaskShape.fillRect(panelX, ceilingY - 10, panelW, 10);
+        const warningMask = warningMaskShape.createGeometryMask();
+        warningGfx.setMask(warningMask);
+
+        for (let i = 0; i < panelW / stripeW + 2; i++) {
+            warningGfx.beginPath();
+            warningGfx.moveTo(panelX + i * stripeW * 2, ceilingY - 10);
+            warningGfx.lineTo(panelX + i * stripeW * 2 + stripeW, ceilingY - 10);
+            warningGfx.lineTo(panelX + i * stripeW * 2 + stripeW - 10, ceilingY);
+            warningGfx.lineTo(panelX + i * stripeW * 2 - 10, ceilingY);
+            warningGfx.closePath();
+            warningGfx.fillPath();
+        }
+
         // O'yin maydoni chegaralarini yangilash
         this.playfieldLeft = panelX + 18; // Biroz ichkariga
         this.playfieldRight = panelX + panelW - 18;
