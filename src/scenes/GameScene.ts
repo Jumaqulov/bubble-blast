@@ -78,7 +78,7 @@ export class GameScene extends Phaser.Scene {
     private queuedColor: HexColor = Colors.bubbles.blue;
 
     private projectile: Projectile | null = null;
-
+    private levelTargetScore = 2000; // Default
     private shotsLeft = 0;
     private level = 1;
     private score = 0;
@@ -269,70 +269,84 @@ export class GameScene extends Phaser.Scene {
     private setupShooter() {
         const pfCenter = (this.playfieldLeft + this.playfieldRight) / 2;
         this.shooterX = pfCenter;
-        this.shooterY = GAME.height - 130; // Biroz ko'taramiz
+        // Pushkani biroz yuqoriroqqa ko'taramiz
+        this.shooterY = GAME.height - 130;
 
-        // --- PUSHKA (CANNON) KONTEYNERI ---
+        // --- 1. PUSHKA (CANNON) KONTEYNERI ---
+        // Agar avvalgi o'yindan qolib ketgan bo'lsa, tozalaymiz
+        if (this.shooterBase) {
+            this.shooterBase.destroy();
+        }
+
         this.shooterBase = this.add.container(this.shooterX, this.shooterY);
 
         const cannon = this.add.graphics();
 
-        // 1. Pushka Og'zi (Barrel) - To'q Metallik
-        // Uzuuun va ingichka bo'lishi kerak
+        // Pushka Og'zi (Barrel) - To'q Metallik rangda
         cannon.fillStyle(0x2C3E50, 1); // Dark Gunmetal
-        cannon.lineStyle(2, 0x5D6D7E, 1); // Yaltiroq cheti
+        cannon.lineStyle(2, 0x5D6D7E, 1); // Chetlari yaltiroq
         // (x, y, w, h, radius) - Markazdan tepaga qarab chizamiz
         cannon.fillRoundedRect(-16, -70, 32, 80, 8);
         cannon.strokeRoundedRect(-16, -70, 32, 80, 8);
 
-        // 2. Barrel Ichki qismi (Tirqish)
+        // Barrel ichki qismi (Tirqish)
         cannon.fillStyle(0x17202A, 1); // Deyarli qora
         cannon.fillRoundedRect(-8, -65, 16, 40, 4);
 
-        // 3. Pushka Asosi (Outer Ring) - Yorqinroq Metall
+        // Pushka Asosi (Outer Ring)
         cannon.fillStyle(0x34495E, 1);
         cannon.fillCircle(0, 0, 42);
         cannon.lineStyle(3, 0x85929E, 1); // Kumush hoshiya
         cannon.strokeCircle(0, 0, 42);
 
-        // 4. Asosning Ichki qismi (Inner Ring) - Shisha effekt
+        // Asosning ichki qismi (Inner Ring)
         cannon.fillStyle(0x1B2631, 1);
         cannon.fillCircle(0, 0, 28);
 
-        // 5. Yorug'lik (Gloss)
+        // Yaltirash effekti (Gloss)
         cannon.fillStyle(0xFFFFFF, 0.1);
         cannon.fillCircle(-10, -10, 15);
 
         this.shooterBase.add(cannon);
-        this.shooterBase.setDepth(20); // Pufakchadan balandda tursin (muhim!)
 
-        // --- AIM LINE (Nishon) ---
+        // MUHIM: Pushkaning chuqurligi (Depth) 20 bo'ladi
+        this.shooterBase.setDepth(20);
+
+        // --- 2. AIM LINE (Nishon chizig'i) ---
+        if (this.aimLine) this.aimLine.destroy();
         this.aimLine = this.add.graphics();
         this.aimLine.setDepth(5);
 
-        // --- NEXT BUBBLE (Otiladigan shar) ---
-        // Pufakcha pushkaning "Ichida" yoki "Ostida" paydo bo'lishi kerak
+        // --- 3. NEXT BUBBLE (Otishga tayyor shar) ---
         this.nextColor = this.pickAvailableColor();
         this.nextBubble = this.makeBubbleVisual(this.shooterX, this.shooterY, this.nextColor, BUBBLES.radius);
-        this.nextBubble.setDepth(19); // Pushkadan biroz pastda (ichida turgandek ko'rinadi)
+
+        // MUHIM TUZATISH: Pufakcha pushkaning ustida turishi uchun Depth 21 (pushkadan baland) bo'lishi SHART!
+        this.nextBubble.setDepth(21);
+
         this.bindSwapHandler(this.nextBubble);
         this.updateBombIndicator();
 
-        // --- PREVIEW SLOT (Navbatdagi shar) ---
+        // --- 4. PREVIEW SLOT (Keyingi navbatdagi shar) ---
         this.previewX = this.shooterX + 110;
         this.previewY = this.shooterY + 20;
         this.previewRadius = Math.round(BUBBLES.radius * 0.7);
 
-        // Preview tagligi (Base)
-        const slotBase = this.add.graphics();
-        slotBase.fillStyle(0x000000, 0.3);
-        slotBase.fillCircle(this.previewX, this.previewY, this.previewRadius + 8);
-        slotBase.lineStyle(2, 0xFFFFFF, 0.2);
-        slotBase.strokeCircle(this.previewX, this.previewY, this.previewRadius + 8);
-        slotBase.setDepth(4);
+        // Eski slotni tozalash
+        if (this.nextSlot) {
+            this.nextSlot.destroy();
+        }
+
+        // Yangi slot chizish (Aylana)
+        this.nextSlot = this.add
+            .circle(this.previewX, this.previewY, this.previewRadius + 10, 0x000000, 0.3)
+            .setStrokeStyle(2, 0xFFFFFF, 0.3);
+        this.nextSlot.setDepth(4);
 
         // Swap belgisi (aylanadigan strelkalar)
         this.drawSwapHint();
 
+        // Keyingi shar
         this.queuedColor = this.pickAvailableColor(this.nextColor);
         this.queuedBubble = this.makeBubbleVisual(this.previewX, this.previewY, this.queuedColor, this.previewRadius);
         this.queuedBubble.setDepth(5);
@@ -431,7 +445,7 @@ export class GameScene extends Phaser.Scene {
         // Store total rows for scroll reveal
         this.totalLevelRows = params.rows;
         this.visibleRowOffset = 0;
-
+        this.levelTargetScore = (params.rows * params.cols * 0.5) * 10 + 1000;
         // Generate grid
         const bubbles = LevelManager.generateInitialGrid(params);
 
@@ -699,6 +713,7 @@ export class GameScene extends Phaser.Scene {
             level: this.level,
             score: this.score,
             shots: this.shotsLeft,
+            targetScore: this.levelTargetScore // <-- MUHIM
         });
         this.hud.setDepth(10);
     }
@@ -862,7 +877,7 @@ export class GameScene extends Phaser.Scene {
 
         this.score += safe;
         this.hud?.setScore(this.score);
-
+        this.hud?.setScore(this.score);
         if (x === undefined || y === undefined) return;
 
         this.effectManager.spawnFloatingText(x, y, `+${safe}`, 0xffd700);
@@ -1026,12 +1041,22 @@ export class GameScene extends Phaser.Scene {
             bubble.destroy();
         }
 
+        // Preview (kichik) shardan -> Asosiy (katta) sharga aylantiramiz
         const startScale = this.previewRadius / BUBBLES.radius;
+
+        // Yangi shar yaratamiz (Shooter koordinatasida emas, Preview koordinatasida paydo bo'lib, uchib keladi)
         this.nextBubble = this.makeBubbleVisual(this.previewX, this.previewY, this.nextColor, BUBBLES.radius);
-        this.nextBubble.setDepth(5);
+
+        // --- MUHIM TUZATISH ---
+        // Avval 5 edi, endi 21 qilamiz (Pushkadan baland bo'lishi uchun)
+        this.nextBubble.setDepth(21);
+        // ----------------------
+
         this.nextBubble.setScale(startScale);
         this.bindSwapHandler(this.nextBubble);
         this.updateBombIndicator();
+
+        // Animatsiya: Kichik joyidan katta joyiga (Pushkaga) uchib kelishi
         this.tweens.add({
             targets: this.nextBubble,
             x: this.shooterX,
@@ -1041,6 +1066,7 @@ export class GameScene extends Phaser.Scene {
             ease: "Quad.Out",
         });
 
+        // Keyingi navbatdagi sharni tayyorlash
         this.queueNextBubble();
     }
 

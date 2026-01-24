@@ -64,5 +64,6 @@ export function hexTo0x(hex: HexColor): number {
 
 export function randomBubbleHex(): HexColor {
     const idx = Math.floor(Math.random() * Colors.bubblePalette.length);
-    return Colors.bubblePalette[idx];
+    // TypeScriptga bu qiymat aniq mavjudligini aytish uchun "!" qo'yamiz
+    return Colors.bubblePalette[idx]!;
 }

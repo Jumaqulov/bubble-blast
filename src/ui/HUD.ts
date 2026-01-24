@@ -2,100 +2,149 @@
 import Phaser from "phaser";
 import { Colors, hexTo0x } from "../config/colors";
 import { GAME } from "../config/constants";
+import { getPhosphorKey } from "./phosphor";
 
 export type HUDInitData = {
     level: number;
     score: number;
     shots: number;
+    targetScore: number;
 };
 
 export class HUD extends Phaser.GameObjects.Container {
     private bg: Phaser.GameObjects.Graphics;
+
+    // Progress Bar elementlari
+    private barBg: Phaser.GameObjects.Rectangle;
+    private barFill: Phaser.GameObjects.Rectangle;
+    private barMask: Phaser.GameObjects.Graphics;
+    private stars: Phaser.GameObjects.Image[] = [];
+
     private levelText: Phaser.GameObjects.Text;
     private scoreText: Phaser.GameObjects.Text;
     private shotsText: Phaser.GameObjects.Text;
 
+    private currentScore = 0;
+    private targetScore = 1000;
+    private barWidth = 0;
+
     constructor(scene: Phaser.Scene, data: HUDInitData) {
         super(scene, 0, 0);
 
-        const barH = 80; // Biroz ixchamroq qilamiz
+        this.currentScore = data.score;
+        this.targetScore = data.targetScore || 1000;
+
+        const barH = 100;
         const barMargin = 14;
         const barX = barMargin;
         const barY = 8;
         const barW = GAME.width - barMargin * 2;
-        const barHInner = barH - 10;
 
+        // 1. Asosiy Panel (Fon)
         this.bg = scene.add.graphics();
+        this.bg.fillStyle(0x1A365D, 0.9); // To'q ko'k
+        this.bg.fillRoundedRect(barX, barY, barW, barH - 10, 16);
+        this.bg.lineStyle(2, 0x4AA6EB, 0.5);
+        this.bg.strokeRoundedRect(barX, barY, barW, barH - 10, 16);
 
-        // 1. Shadow (Orqa soya)
-        this.bg.fillStyle(0x000000, 0.4);
-        this.bg.fillRoundedRect(barX + 4, barY + 6, barW, barHInner, 16);
+        // 2. PROGRESS BAR (O'rtada)
+        const pbW = 320;
+        const pbH = 24;
+        const pbX = GAME.width / 2 - pbW / 2;
+        const pbY = barY + 45;
+        this.barWidth = pbW;
 
-        // 2. Glass Panel (To'q va Shaffof)
-        // Yorqin ko'k emas, balki "To'q Dengiz" rangi
-        this.bg.fillStyle(0x1A365D, 0.85); // Dark Blue, 85% opacity
-        this.bg.fillRoundedRect(barX, barY, barW, barHInner, 16);
+        // Bar orqasi (kulrang) - barBg ga biriktiramiz
+        this.barBg = scene.add.rectangle(GAME.width / 2, pbY + pbH / 2, pbW, pbH, 0x334155).setDepth(1);
+        this.barBg.setStrokeStyle(2, 0x475569); // Cheti ham ochroq
 
-        // 3. Highlight (Tepa qismidagi yaltirash)
-        this.bg.fillStyle(0xFFFFFF, 0.1);
-        this.bg.fillRoundedRect(barX, barY, barW, barHInner / 2, { tl: 16, tr: 16, bl: 0, br: 0 });
+        // Bar to'lishi (Sariq)
+        this.barFill = scene.add.rectangle(pbX, pbY, 0, pbH, 0xFACC15).setOrigin(0, 0).setDepth(2); // Yellow-400
 
-        // 4. Border (Ingichka yaltiroq hoshiya)
-        this.bg.lineStyle(2, 0x4AA6EB, 0.5); // Och ko'k hoshiya
-        this.bg.strokeRoundedRect(barX, barY, barW, barHInner, 16);
+        // Mask (Bar to'lganda chetidan chiqib ketmasligi uchun)
+        this.barMask = scene.add.graphics();
+        this.barMask.fillStyle(0xffffff);
+        this.barMask.fillRoundedRect(pbX, pbY, pbW, pbH, 8);
+        const mask = this.barMask.createGeometryMask();
+        this.barFill.setMask(mask);
+        this.barBg.setMask(mask);
 
-        // FONTLAR (Zamonaviyroq)
-        const textStyle = {
-            fontFamily: "Arial, sans-serif",
-            fontSize: "24px",
-            color: "#E2E8F0", // Oqish-kulrang (Yumshoqroq)
-            fontStyle: "bold"
-        };
+        // Yulduzchalar (3 ta)
+        const starPositions = [0.33, 0.66, 1.0];
+        starPositions.forEach((pos) => {
+            const sx = pbX + pbW * pos;
+            const sy = pbY + pbH / 2;
 
-        // Level
-        this.levelText = scene.add
-            .text(barX + 20, barY + 22, `LEVEL ${data.level}`, textStyle)
-            .setOrigin(0, 0);
+            // Bo'sh yulduz (foni)
+            const starBg = scene.add.image(sx, sy, getPhosphorKey("starFilled"));
+            starBg.setDisplaySize(28, 28);
+            starBg.setTint(0x64748B); 
+            starBg.setDepth(3);
 
-        // Score (Katta va Oltin rangda)
-        this.scoreText = scene.add
-            .text(GAME.width / 2, barY + 22, `${data.score}`, {
-                fontFamily: "Arial, sans-serif",
-                fontSize: "32px",
-                color: "#FCD34D", // Amber-Gold
-                fontStyle: "bold",
-                shadow: { offsetX: 0, offsetY: 2, color: "#000000", blur: 4, fill: true }
-            })
-            .setOrigin(0.5, 0);
+            // Yonadigan yulduz (ustida)
+            const star = scene.add.image(sx, sy, getPhosphorKey("starFilled"));
+            star.setDisplaySize(28, 28);
+            star.setTint(0xFACC15); // Yonuvchi sariq
+            star.setDepth(4);
+            star.setVisible(false); // Boshida ko'rinmaydi
 
-        // Shots
-        this.shotsText = scene.add
-            .text(barX + barW - 20, barY + 22, `${data.shots} LEFT`, {
-                ...textStyle,
-                color: "#F87171" // Och qizil (Ogohlantirish rangi)
-            })
-            .setOrigin(1, 0);
+            this.stars.push(star);
+            this.add([starBg, star]);
+        });
 
-        this.add([this.bg, this.levelText, this.scoreText, this.shotsText]);
+        // 3. TEXTLAR
+        const textStyle = { fontFamily: "Arial", fontSize: "20px", color: "#E2E8F0", fontStyle: "bold" };
 
+        this.levelText = scene.add.text(barX + 20, barY + 20, `LEVEL ${data.level}`, textStyle);
+
+        // Score (O'ng tarafda)
+        this.scoreText = scene.add.text(barX + barW - 20, barY + 20, `${data.score}`, { ...textStyle, color: "#FCD34D" }).setOrigin(1, 0);
+
+        // Shots (Pastda markazda yoki chapda)
+        this.shotsText = scene.add.text(barX + 20, barY + 50, `${data.shots} Shots`, { ...textStyle, fontSize: "16px", color: "#F87171" });
+
+        this.add([this.bg, this.barBg, this.barFill, this.levelText, this.scoreText, this.shotsText]);
         scene.add.existing(this);
+
+        // Birinchi marta yangilash
+        this.updateProgress();
     }
 
+    // --- Methodlar (GameScene chaqiradigan) ---
+
     setLevel(level: number) {
-        this.levelText.setText(`Level: ${level}`);
+        this.levelText.setText(`LEVEL ${level}`);
     }
 
     setScore(score: number) {
-        this.scoreText.setText(`Score: ${score}`);
+        this.currentScore = score;
+        this.scoreText.setText(`${score}`);
+        this.updateProgress();
     }
 
     setShots(shots: number) {
-        this.shotsText.setText(`Shots: ${shots}`);
+        this.shotsText.setText(`${shots} Shots`);
     }
 
-    refreshValues(data: Partial<HUDInitData>) {
-        if (data.level !== undefined) this.setLevel(data.level);
-        if (data.score !== undefined) this.setScore(data.score);
-        if (data.shots !== undefined) this.setShots(data.shots);
+    private updateProgress() {
+        // Progressni hisoblash (0 dan 1 gacha)
+        const pct = Phaser.Math.Clamp(this.currentScore / this.targetScore, 0, 1);
+
+        // Barni cho'zish
+        this.barFill.width = this.barWidth * pct;
+
+        // Yulduzchalarni yoqish
+        const starThresholds = [0.33, 0.66, 0.99];
+        this.stars.forEach((star, idx) => {
+            const threshold = starThresholds[idx];
+            // TypeScript: threshold undefined emasligiga ishonch hosil qilamiz
+            if (threshold !== undefined && pct >= threshold) {
+                if (!star.visible) {
+                    star.setVisible(true);
+                    star.setScale(1.5);
+                    this.scene.tweens.add({ targets: star, scale: 1, duration: 200, ease: 'Back.Out' });
+                }
+            }
+        });
     }
 }
