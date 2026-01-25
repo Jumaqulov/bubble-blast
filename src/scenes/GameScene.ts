@@ -23,9 +23,9 @@ import { YandexSDK } from "../services/YandexSDK";
 type CellKey = string;
 
 type BubbleVisual = Phaser.GameObjects.Container & {
-    base: Phaser.GameObjects.Arc;   // Asosiy shar (aylana)
-    gloss?: Phaser.GameObjects.Shape; // Yaltirash (ixtiyoriy)
-    shade?: Phaser.GameObjects.Shape; // Soya (ixtiyoriy)
+    base: Phaser.GameObjects.Image;   // Main Body Sprite
+    gloss?: Phaser.GameObjects.Shape; // Optional (unused)
+    shade?: Phaser.GameObjects.Shape; // Optional (unused)
     bubbleRadius: number;
     colorHex: HexColor;
 };
@@ -213,59 +213,26 @@ export class GameScene extends Phaser.Scene {
     // -------------------------
 
     private drawBackdrop() {
-        const gfx = this.add.graphics();
+        // Layer 1: Deep Background (bg_surround) - Fills entire screen
+        // Covers the "Side Borders" with a rich texture
+        const bgDeep = this.add.image(GAME.width / 2, GAME.height / 2, "bg_surround");
+        bgDeep.setDisplaySize(GAME.width, GAME.height);
+        bgDeep.setDepth(-102);
 
-        // 1. Umumiy Fon (Och binafsha)
-        gfx.fillStyle(hexTo0x(Colors.ui.background));
-        gfx.fillRect(0, 0, GAME.width, GAME.height);
-
-        // 2. O'yin maydoni (Markaziy qism biroz ochroq)
-        // Maqsadli rasmda o'yin maydoni ajralib turadi
         const panelW = 580; // Kengroq qildim
         const panelX = (GAME.width - panelW) / 2;
 
-        // Chap va O'ng devorlar (To'qroq rangda)
-        gfx.fillStyle(0x0F172A, 0.5);
-        gfx.fillRect(0, 0, panelX, GAME.height);
-        gfx.fillRect(panelX + panelW, 0, panelX, GAME.height);
+        // Layer 2: Drop Shadow behind the Playfield
+        // Adds depth between the side borders and the main game area
+        const shadowGfx = this.add.graphics();
+        shadowGfx.fillStyle(0x000000, 0.5);
+        shadowGfx.fillRect(panelX - 10, 0, panelW + 20, GAME.height);
+        shadowGfx.setDepth(-101);
 
-        // Devor chizig'i
-        gfx.lineStyle(4, 0x6A80B8, 1);
-        gfx.beginPath();
-        gfx.moveTo(panelX, 0);
-        gfx.lineTo(panelX, GAME.height);
-        gfx.moveTo(panelX + panelW, 0);
-        gfx.lineTo(panelX + panelW, GAME.height);
-        gfx.strokePath();
-
-        // --- Ceiling Visuals (Shift Chizig'i) ---
-        // Top "Danger/Ceiling" bar decoration
-        const ceilingY = 140;
-        gfx.fillStyle(0x334155, 1); // Darker slate
-        gfx.fillRect(panelX, ceilingY - 10, panelW, 10);
-
-        // Striped warning pattern for ceiling line
-        const warningGfx = this.add.graphics();
-        warningGfx.setDepth(-98);
-        const stripeW = 20;
-        warningGfx.fillStyle(0xFFFFFF, 0.1);
-
-        // Create mask for warning stripe area
-        const warningMaskShape = this.make.graphics();
-        warningMaskShape.fillStyle(0xffffff);
-        warningMaskShape.fillRect(panelX, ceilingY - 10, panelW, 10);
-        const warningMask = warningMaskShape.createGeometryMask();
-        warningGfx.setMask(warningMask);
-
-        for (let i = 0; i < panelW / stripeW + 2; i++) {
-            warningGfx.beginPath();
-            warningGfx.moveTo(panelX + i * stripeW * 2, ceilingY - 10);
-            warningGfx.lineTo(panelX + i * stripeW * 2 + stripeW, ceilingY - 10);
-            warningGfx.lineTo(panelX + i * stripeW * 2 + stripeW - 10, ceilingY);
-            warningGfx.lineTo(panelX + i * stripeW * 2 - 10, ceilingY);
-            warningGfx.closePath();
-            warningGfx.fillPath();
-        }
+        // Layer 3: Playfield Gradient (bg_gradient) - Center Area
+        const bgCenter = this.add.image(GAME.width / 2, GAME.height / 2, "bg_gradient");
+        bgCenter.setDisplaySize(panelW, GAME.height); // Only width of panel
+        bgCenter.setDepth(-100);
 
         // O'yin maydoni chegaralarini yangilash
         this.playfieldLeft = panelX + 18; // Biroz ichkariga
@@ -274,21 +241,25 @@ export class GameScene extends Phaser.Scene {
         this.playfieldBottom = GAME.height - 18;
         this.gridTopY = this.playfieldTop;
 
-        gfx.setDepth(-100);
+        // Border Chiziqlari (Vertical Lines separating playfield from sides)
+        const lineGfx = this.add.graphics();
+        lineGfx.lineStyle(2, 0xFFFFFF, 0.15); // Subtle separator
+        lineGfx.beginPath();
+        lineGfx.moveTo(panelX, 0);
+        lineGfx.lineTo(panelX, GAME.height);
+        lineGfx.moveTo(panelX + panelW, 0);
+        lineGfx.lineTo(panelX + panelW, GAME.height);
+        lineGfx.strokePath();
+        lineGfx.setDepth(-99);
 
-        const patternGfx = this.add.graphics();
-        patternGfx.setDepth(-99); // Asosiy fondan biroz tepada
+        // Top "Danger/Ceiling" bar visual
+        const ceilingY = 140;
+        const topBar = this.add.graphics();
+        topBar.fillStyle(0x0F172A, 0.4);
+        topBar.fillRect(panelX, ceilingY - 10, panelW, 10);
+        topBar.setDepth(-98);
 
-        // O'yin maydoni ichiga tasodifiy doiralar chizamiz
-        patternGfx.lineStyle(2, 0xFFFFFF, 0.05); // Juda xira oq chiziq
-
-        for (let i = 0; i < 15; i++) {
-            const r = Phaser.Math.Between(30, 80); // Har xil kattalikda
-            const x = Phaser.Math.Between(this.playfieldLeft + 50, this.playfieldRight - 50);
-            const y = Phaser.Math.Between(this.playfieldTop + 50, this.playfieldBottom - 200);
-
-            patternGfx.strokeCircle(x, y, r);
-        }
+        // No random patterns anymore. Clean look.
     }
 
     private setupGridDimensions() {
@@ -317,30 +288,34 @@ export class GameScene extends Phaser.Scene {
 
         const cannon = this.add.graphics();
 
-        // Pushka Og'zi (Barrel) - To'q Metallik rangda
-        cannon.fillStyle(0x2C3E50, 1); // Dark Gunmetal
-        cannon.lineStyle(2, 0x5D6D7E, 1); // Chetlari yaltiroq
-        // (x, y, w, h, radius) - Markazdan tepaga qarab chizamiz
-        cannon.fillRoundedRect(-16, -70, 32, 80, 8);
-        cannon.strokeRoundedRect(-16, -70, 32, 80, 8);
+        // --- MODERN CANNON DESIGN ---
 
-        // Barrel ichki qismi (Tirqish)
-        cannon.fillStyle(0x17202A, 1); // Deyarli qora
-        cannon.fillRoundedRect(-8, -65, 16, 40, 4);
+        // 1. Barrel (Og'zi) - Rounded Rectangle
+        cannon.fillStyle(0x2C3E50, 1); // Gunmetal
+        cannon.fillRoundedRect(-20, -75, 40, 90, 10);
+        // Barrel Highlight (Left Side)
+        cannon.fillStyle(0x5D6D7E, 0.5);
+        cannon.fillRect(-16, -75, 8, 80);
 
-        // Pushka Asosi (Outer Ring)
-        cannon.fillStyle(0x34495E, 1);
-        cannon.fillCircle(0, 0, 42);
-        cannon.lineStyle(3, 0x85929E, 1); // Kumush hoshiya
-        cannon.strokeCircle(0, 0, 42);
+        // 2. Connector Ring (Barrel Base)
+        cannon.fillStyle(0x95A5A6, 1); // Silver
+        cannon.fillRoundedRect(-22, -25, 44, 15, 4);
 
-        // Asosning ichki qismi (Inner Ring)
-        cannon.fillStyle(0x1B2631, 1);
-        cannon.fillCircle(0, 0, 28);
+        // 3. Main Body (Outer Ring)
+        cannon.fillStyle(0x34495E, 1); // Dark Blue-Grey
+        cannon.fillCircle(0, 0, 48);
+        cannon.lineStyle(4, 0x85929E, 1); // Silver Stroke
+        cannon.strokeCircle(0, 0, 48);
 
-        // Yaltirash effekti (Gloss)
-        cannon.fillStyle(0xFFFFFF, 0.1);
-        cannon.fillCircle(-10, -10, 15);
+        // 4. Inner Core (Dark Hole)
+        cannon.fillStyle(0x17202A, 1); // Almost Black
+        cannon.fillCircle(0, 0, 32);
+
+        // 5. Core Detail (Small light in center)
+        cannon.fillStyle(0x3498DB, 0.8); // Blue LED/Light
+        cannon.fillCircle(0, 0, 8);
+        cannon.fillStyle(0xFFFFFF, 0.6); // Glint
+        cannon.fillCircle(-3, -3, 3);
 
         this.shooterBase.add(cannon);
 
@@ -1516,6 +1491,10 @@ export class GameScene extends Phaser.Scene {
     // Utils
     // -------------------------
 
+    private getBubbleTextureKey(colorHex: string): string {
+        return `bubble_${colorHex}`;
+    }
+
     private key(r: number, c: number): CellKey {
         return `${r},${c}`;
     }
@@ -1523,32 +1502,28 @@ export class GameScene extends Phaser.Scene {
     private makeBubbleVisual(x: number, y: number, colorHex: HexColor, radius: number): BubbleVisual {
         const bubble = this.add.container(x, y) as BubbleVisual;
 
-        // 1. Soya
-        const shadow = this.add.circle(2, 4, radius, 0x000000, 0.2);
+        // Visual Size: Set to radius * 2.3 to ensure tight grid packing
+        const visualDiameter = radius * 2.3;
+        const scale = (visualDiameter) / 64;
 
-        // 2. Asosiy Shar (Bu "base" bo'ladi)
-        const base = this.add.circle(0, 0, radius, hexTo0x(colorHex));
-        base.setStrokeStyle(1, 0x000000, 0.1);
+        // 1. Drop Shadow (underneath main body)
+        const shadow = this.add.image(2, 4, "bubble_glossy");
+        shadow.setScale(scale);
+        shadow.setTint(0x000000);
+        shadow.setAlpha(0.2); // Sightly darker for vibrant orbs
 
-        // 3. Ichki Soya
-        const innerShade = this.add.circle(radius * 0.15, radius * 0.15, radius * 0.85, 0x000000, 0.15);
-        innerShade.setBlendMode(Phaser.BlendModes.MULTIPLY);
+        // 2. Main Body (Specific Color Pre-baked)
+        // High vibrancy semi-transparent textures with solid colored rims
+        const base = this.add.image(0, 0, this.getBubbleTextureKey(colorHex));
+        base.setScale(scale);
+        base.setAlpha(1);
 
-        // 4. Yaltirash (Gloss)
-        const gloss = this.add.ellipse(-radius * 0.35, -radius * 0.35, radius * 0.6, radius * 0.4, 0xffffff, 0.7);
-        gloss.setRotation(Phaser.Math.DegToRad(-45));
+        // Add to container
+        bubble.add([shadow, base]);
+        bubble.setSize(radius * 2, radius * 2); // Hit area stays accurate to original radius
 
-        const sparkle = this.add.circle(-radius * 0.45, -radius * 0.45, radius * 0.15, 0xffffff, 0.9);
-
-        // Hamma elementlarni konteynerga qo'shamiz
-        bubble.add([shadow, base, innerShade, gloss, sparkle]);
-        bubble.setSize(radius * 2, radius * 2);
-
-        // !!! ENG MUHIM QISM: Xususiyatlarni biriktirish !!!
-        // Bu bo'lmasa "Cannot read properties of undefined" beradi
+        // Bind properties
         bubble.base = base;
-        bubble.gloss = gloss;
-        bubble.shade = innerShade;
         bubble.bubbleRadius = radius;
         bubble.colorHex = colorHex;
 
@@ -1556,25 +1531,25 @@ export class GameScene extends Phaser.Scene {
     }
 
     private setBubbleColor(bubble: BubbleVisual, colorHex: HexColor) {
-        // 1. Xavfsizlik tekshiruvi: Agar bubble yoki uning asosi yo'q bo'lsa, kod sinmasin
         if (!bubble || !bubble.base) return;
 
-        // 2. Rangi o'zgartirish
-        // DİQQAT: Biz "Arc" (Circle) ishlatganimiz uchun "clear()" kerak emas!
-        // Shunchaki setFillStyle ishlatamiz.
-        bubble.base.setFillStyle(hexTo0x(colorHex));
-
-        // 3. Kodni yangilash
+        // Switch to the pre-baked color texture
+        bubble.base.setTexture(this.getBubbleTextureKey(colorHex));
         bubble.colorHex = colorHex;
     }
 
     private updateBombIndicator() {
-        // Agar bubble yoki uning asosi (base) yo'q bo'lsa, to'xtasin
         if (!this.nextBubble || !this.nextBubble.base) return;
 
-        const strokeColor = this.bombActive ? Colors.ui.warning : Colors.ui.textPrimary;
-
-        // Bu yerda xatolik chiqmaydi, chunki yuqorida tekshirdik
-        this.nextBubble.base.setStrokeStyle(2, hexTo0x(strokeColor), this.bombActive ? 0.9 : 0.25);
+        if (this.bombActive) {
+            // Since we don't have a pre-baked bomb texture yet, 
+            // we use a warning tint but it will affect the highlights.
+            // As a compromise for bombs, this is acceptable for now.
+            this.nextBubble.base.setTint(hexTo0x(Colors.ui.warning));
+        } else {
+            // Restore texture and clear tint
+            this.nextBubble.base.clearTint();
+            this.nextBubble.base.setTexture(this.getBubbleTextureKey(this.nextBubble.colorHex));
+        }
     }
 }

@@ -23,18 +23,17 @@ export class EffectManager {
 
         const tint = hexTo0x(colorHex);
 
-        const emitter = this.scene.add.particles(x, y, "particle_dot", {
-            lifespan: { min: 600, max: 800 },
-            speed: { min: 150, max: 350 },
-            scale: { start: 0.8, end: 0 },
+        const emitter = this.scene.add.particles(x, y, "particle_soft", {
+            lifespan: { min: 400, max: 600 }, // Faster pop
+            speed: { min: 200, max: 500 },    // Explosive speed
+            scale: { start: 1, end: 0 },      // Start full size since it's small (16px)
             alpha: { start: 1, end: 0 },
-            gravityY: 300,
+            gravityY: 800,                    // Heavy gravity as requested
             angle: { min: 0, max: 360 },
             quantity: count,
             emitting: false,
             tint: tint,
-            // Add a small "pop" feel with blend mode (optional, but looks nice for neon)
-            blendMode: Phaser.BlendModes.ADD
+            blendMode: Phaser.BlendModes.ADD  // Neon/Glow effect
         });
 
         // Burst!
